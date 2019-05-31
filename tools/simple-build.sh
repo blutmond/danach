@@ -24,3 +24,5 @@ $TOKENIZER_TOOL src/rules/tokenizer rule_spec > .build/gen/rules/tokenizer.cc ||
 $PARSER_TOOL src/rules/parser > .build/gen/rules/parser.cc || exit -1
 $CPP_SUBSET_TOOL src/rules/tool > .build/gen/rules/tool.cc || exit -1
 $CLANG .build/gen/rules/tool.cc -o .build/rule-apply || exit -1
+
+echo "Success."
