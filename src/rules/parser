@@ -1,0 +1,147 @@
+module rule_spec;
+
+type Decl = {
+  File = (name: Token, invoke: ToolInvoke);
+};
+
+type ToolInvoke = {
+  ClangBinary = (
+    srcs: Array<FileSource>,
+    dep_only: Array<FileSource>,
+    flags: Array<Token>
+  );
+  CppGen = (
+    tool: FileSource,
+    src: FileSource,
+    extra_flags: Array<Token>
+  );
+};
+
+type FileSource = {
+  Const = (name: Token);
+  Rule = (name: Token);
+};
+
+type Module = (
+  decls: Array<Decl>
+);
+
+raw_func ParseFileSource() -> FileSource {
+  if peak() == quoted_identifier {
+    return new RuleFileSource {
+      name = expect(quoted_identifier);
+    };
+  } else if peak() == identifier {
+    return new RuleFileSource {
+      name = expect(identifier);
+    };
+  } else if peak() == str {
+    return new ConstFileSource {
+      name = expect(str);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseFlagList() -> Array<Token> {
+  ignore expect(open_bracket);
+  let tmp: Array<Token> = comma_array(Token, comma, close_bracket) {
+    return expect(str);
+  };
+  ignore expect(close_bracket);
+  return tmp;
+}
+
+raw_func ParseFileSourceList() -> Array<FileSource> {
+  ignore expect(open_bracket);
+  let tmp: Array<FileSource> = comma_array(FileSource, comma, close_bracket) {
+    return ParseFileSource();
+  };
+  ignore expect(close_bracket);
+  return tmp;
+}
+
+raw_func ParseToolInvoke() -> ToolInvoke {
+  if peak() == "cpp_gen_tool" {
+    return new CppGenToolInvoke {
+      ignore expect(identifier);
+      ignore expect(open_paran);
+      tool = nullptr;
+      src = nullptr;
+      loop {
+        if peak() == "src" {
+          ignore expect(identifier);
+          ignore expect(equal);
+          src = ParseFileSource();
+          ignore expect(comma);
+        } else if peak() == "tool" {
+          ignore expect(identifier);
+          ignore expect(equal);
+          tool = ParseFileSource();
+          ignore expect(comma);
+        } else if peak() == "extra_flags" {
+          ignore expect(identifier);
+          ignore expect(equal);
+          extra_flags = ParseFlagList();
+          ignore expect(comma);
+        } else {
+          break;
+        }
+      }
+      ignore expect(close_paran);
+    };
+  } else if peak() == "clang_binary" {
+    return new ClangBinaryToolInvoke {
+      ignore expect(identifier);
+      ignore expect(open_paran);
+      loop {
+        if peak() == "srcs" {
+          ignore expect(identifier);
+          ignore expect(equal);
+          srcs = ParseFileSourceList();
+          ignore expect(comma);
+        } else if peak() == "dep_only" {
+          ignore expect(identifier);
+          ignore expect(equal);
+          dep_only = ParseFileSourceList();
+          ignore expect(comma);
+        } else if peak() == "flags" {
+          ignore expect(identifier);
+          ignore expect(equal);
+          flags = ParseFlagList();
+          ignore expect(comma);
+        } else {
+          break;
+        }
+      }
+      ignore expect(close_paran);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseDecl() -> Decl {
+  if peak() == "file" {
+    return new FileDecl {
+      ignore expect(identifier);
+      if peak() == identifier {
+        name = expect(identifier);
+      } else {
+        name = expect(quoted_identifier);
+      }
+      ignore expect(equal);
+      invoke = ParseToolInvoke();
+      ignore expect(semi);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func DoParse() -> Module {
+  return new Module {
+    decls = concat_array(Decl, eof) { return ParseDecl(); };
+  };
+}

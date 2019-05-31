@@ -1,0 +1,21 @@
+module tokenizer_gen;
+
+type SetExpr = {
+  Integer = (value: Token);
+  Char = (value: Token);
+  Range = (loc: Token, lhs: SetExpr, rhs: SetExpr);
+  Sum = (loc: Token, lhs: SetExpr, rhs: SetExpr);
+  Named = (name: Token);
+};
+type Stmt = {
+  Compound = (stmts: Array<Stmt>);
+  Case = (cond: SetExpr, true_stmt: Stmt, false_stmt: Stmt);
+  While = (body: Stmt);
+  Break = ();
+  Next = ();
+  Unexpected = ();
+  Fatal = (err_string: Token);
+  Return = (name: Token);
+};
+type LetDecl = (name: Token, expr: SetExpr);
+type Module = (decls: Map<String, LetDecl>, body: Stmt);

@@ -1,0 +1,49 @@
+let number = "0" : "9";
+let start_identifier = ("a" : "z") + ("A" : "Z");
+let identifier = start_identifier + "_" + number;
+
+stcase start_identifier {
+  while {
+    next;
+    stcase identifier {
+    } default {
+      return identifier;
+    }
+  }
+} case number {
+  while {
+    next;
+    stcase number {
+    } default {
+      return number;
+    }
+  }
+} case "\"" {
+  while {
+    next;
+    stcase "\"" {
+      break;
+    } case "\\" {
+      next;
+      stcase 0 { fatal("EOF inside string"); }
+    } case 0 {
+      fatal("EOF inside string");
+    }
+  }
+  next;
+  return str;
+} case "+" { next; return plus;
+} case ":" { next; return colon;
+} case "=" { next; return equal;
+} case "," { next; return comma;
+} case ";" { next; return semi;
+} case "(" { next; return open_paran;
+} case ")" { next; return close_paran;
+} case "{" { next; return open_brace;
+} case "}" { next; return close_brace;
+} case "\n" + " " { next;
+} case 0 {
+  return eof;
+} default {
+  unexpected;
+}
