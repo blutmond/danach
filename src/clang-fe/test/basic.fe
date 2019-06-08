@@ -1,0 +1,14 @@
+
+alias char = clang::uint8_t;
+alias A = clang::A;
+alias int = clang::int32_t;
+alias ptr = clang::ptr;
+alias G = clang::G;
+
+compiler_debug_print_decl ptr;
+
+func main(argc: int, argv: ptr<ptr<char>>) -> int {
+  clang::doMain(argc, argv);
+  clang::Blah::doMain2(argc, argv);
+  return clang::main2();
+}

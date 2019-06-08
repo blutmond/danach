@@ -2,6 +2,10 @@ PARSER_TOOL=.build/parser-gen
 TOKENIZER_TOOL=.build/tokenizer-gen
 CPP_SUBSET_TOOL=.build/cpp_subset-gen
 CLANG="/usr/bin/clang-6.0 -Wall -std=c++17 -lstdc++ -I .build -I src"
+LLVM_CXX=`llvm-config-6.0 --cxxflags`
+LLVM_CXX="$LLVM_CXX -std=c++17"
+LLVM_LINK=`llvm-config-6.0 --libs --ldflags `
+LLVM_LINK="$LLVM_LINK /usr/lib/llvm-6.0/lib/libclang.so -Wl,--start-group -lclangFrontend -lclangSerialization -lclangDriver -lclangCodeGen -lclangSema  -lclangAnalysis -lclangRewrite -lclangAST -lclangParse -lclangEdit -lclangLex -lclangBasic -lclangTooling -Wl,--end-group"
 mkdir -p .build/ || exit -1
 
 mkdir -p .build/gen/tokens/ || exit -1
@@ -24,5 +28,15 @@ $TOKENIZER_TOOL src/rules/tokenizer rule_spec > .build/gen/rules/tokenizer.cc ||
 $PARSER_TOOL src/rules/parser > .build/gen/rules/parser.cc || exit -1
 $CPP_SUBSET_TOOL src/rules/tool > .build/gen/rules/tool.cc || exit -1
 $CLANG .build/gen/rules/tool.cc -o .build/rule-apply || exit -1
+
+mkdir -p .build/gen/clang-fe || exit -1
+mkdir -p .build/gen/clang-fe/test || exit -1
+
+$CLANG $LLVM_CXX src/clang-fe/CodeGenAugment.cc -c -o .build/gen/clang-fe/CodeGenAugment.o
+$CLANG $LLVM_CXX src/clang-fe/RunClang.cc -c -o .build/gen/clang-fe/RunClang.o
+$TOKENIZER_TOOL src/clang-fe/tokenizer clang_fe > .build/gen/clang-fe/tokenizer.cc || exit -1
+$PARSER_TOOL src/clang-fe/parser > .build/gen/clang-fe/parser.cc || exit -1
+$CLANG $LLVM_CXX src/clang-fe/tool.cc .build/gen/clang-fe/RunClang.o .build/gen/clang-fe/CodeGenAugment.o $LLVM_LINK -o .build/clang-fe || exit -1
+
 
 echo "Success."
