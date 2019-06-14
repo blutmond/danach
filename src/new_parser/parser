@@ -1,0 +1,513 @@
+module parser_spec;
+
+type RegexExpr = {
+  String = (value: Token);
+  Integer = (value: Token);
+  Named = (name: Token);
+  Range = (st: RegexExpr, ed: RegexExpr);
+  Juxta = (lhs: RegexExpr, rhs: RegexExpr);
+  Alt = (lhs: RegexExpr, rhs: RegexExpr);
+  Star = (base: RegexExpr);
+  Plus = (base: RegexExpr);
+};
+
+type TokenDecl = {
+  Let = (name: Token, value: RegexExpr);
+  Emit = (name: Token, value: RegexExpr);
+  Ignore = (value: RegexExpr);
+  Import = (module: Token, name: Token);
+};
+
+type Decl = {
+  Type = (name: Token, type: TypeDeclExpr);
+  RawFunc = (name: Token, type: TypeDeclExpr, body: Stmt);
+  Regex = (name: Token, items: Array<TokenDecl>);
+  NFAGraph = (name: Token, root: Node);
+};
+
+type Node = (
+  edges: Array<Edge>
+);
+
+type Edge = {
+  Range = (start: char, end: char, next: Node);
+  Unary = (match: char, next: Node);
+  SkipTo = (next: Node);
+  Emit = (name: Token);
+  Ignore = ();
+  Unexpected = ();
+};
+
+type Module = (
+  mod_name : Token,
+  decls : Array<Decl>
+);
+
+raw_func ParseBaseRegexExpr() -> RegexExpr {
+  if peak() == str {
+    return new StringRegexExpr {
+      value = expect(str);
+    };
+  } else if peak() == number {
+    return new IntegerRegexExpr {
+      value = expect(number);
+    };
+  } else if peak() == identifier {
+    return new NamedRegexExpr {
+      name = expect(identifier);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseRangeRegexExpr() -> RegexExpr {
+  if peak() == open_paran {
+    ignore expect(open_paran);
+    let tmp: RegexExpr = ParseRegexExpr();
+    ignore expect(close_paran);
+    return tmp;
+  }
+  let base: RegexExpr = ParseBaseRegexExpr();
+  if peak() == colon {
+    return new RangeRegexExpr {
+      st = base;
+      ignore expect(colon);
+      ed = ParseBaseRegexExpr();
+    };
+  } else {
+    return base;
+  }
+}
+
+raw_func ParseDupingRegexExpr() -> RegexExpr {
+  let tmp: RegexExpr = ParseRangeRegexExpr();
+  if peak() == star {
+    return new StarRegexExpr {
+      ignore expect(star);
+      base = tmp;
+    };
+  } else if peak() == plus {
+    return new PlusRegexExpr {
+      ignore expect(plus);
+      base = tmp;
+    };
+  } else {
+    return tmp;
+  }
+}
+
+raw_func ParseJuxtaRegexExpr() -> RegexExpr {
+  let tmp: RegexExpr = ParseDupingRegexExpr();
+  loop {
+    if peak() == dot {
+      hackset tmp = new JuxtaRegexExpr {
+        lhs = tmp;
+        ignore expect(dot);
+        rhs = ParseDupingRegexExpr();
+      };
+    } else {
+      return tmp;
+    }
+  }
+}
+
+raw_func ParseAltRegexExpr() -> RegexExpr {
+  let tmp: RegexExpr = ParseJuxtaRegexExpr();
+  loop {
+    if peak() == pipe {
+      hackset tmp = new AltRegexExpr {
+        lhs = tmp;
+        ignore expect(pipe);
+        rhs = ParseJuxtaRegexExpr();
+      };
+    } else {
+      return tmp;
+    }
+  }
+}
+
+raw_func ParseRegexExpr() -> RegexExpr { return ParseAltRegexExpr(); }
+
+raw_func ParseTokenDecl() -> TokenDecl {
+  if peak() == "import" {
+    return new ImportTokenDecl {
+      ignore expect(identifier);
+      module = expect(identifier);
+      ignore expect(dot);
+      name = expect(identifier);
+      ignore expect(semi);
+    };
+  } else if peak() == "emit" {
+    return new EmitTokenDecl {
+      ignore expect(identifier);
+      name = expect(identifier);
+      ignore expect(equal);
+      value = ParseRegexExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "let" {
+    return new LetTokenDecl {
+      ignore expect(identifier);
+      name = expect(identifier);
+      ignore expect(equal);
+      value = ParseRegexExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "ignore" {
+    return new IgnoreTokenDecl {
+      ignore expect(identifier);
+      value = ParseRegexExpr();
+      ignore expect(semi);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseDecl() -> Decl {
+  if peak() == "type" {
+    ignore expect(identifier);
+    return new TypeDecl {
+      name = expect(identifier);
+      ignore expect(equal);
+      type = ParseTypeDeclExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "raw_func" {
+    ignore expect(identifier);
+    return new RawFuncDecl {
+      name = expect(identifier);
+      ignore expect(open_paran);
+      ignore expect(close_paran);
+      ignore expect(arrow);
+      type = ParseTypeDeclExpr();
+      body = ParseCompoundStmt();
+    };
+  } else if peak() == "regex" {
+    return new RegexDecl {
+      ignore expect(identifier);
+      name = expect(identifier);
+      ignore expect(open_brace);
+      items = concat_array(TokenDecl, close_brace) { return ParseTokenDecl(); };
+      ignore expect(close_brace);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func DoParse() -> Module {
+  return new Module {
+    if peak() == "module" {
+      ignore expect(identifier);
+    } else {
+      unexpected();
+    }
+    mod_name = expect(identifier);
+    ignore expect(semi);
+    decls = concat_array(Decl, eof) { return ParseDecl(); };
+  };
+}
+
+type TypeDeclExpr = {
+  Product = (decls: Array<TypeLetDecl>);
+  Sum = (decls: Array<TypeLetDecl>);
+  Named = (name: Token);
+  Parametric = (base: TypeDeclExpr, params: Array<TypeDeclExpr>);
+};
+
+type TypeLetDecl = (name: Token, type: TypeDeclExpr);
+
+type Expr = {
+  RawNew = (name: Token);
+  New = (name: Token, body: Stmt);
+  TypeNew = (type: TypeDecl);
+  StringExpect = (value: Token);
+  TokenExpect = (value: Token);
+  Name = (name: Token);
+  SelfGet = (name: Token);
+  ConcatArray = (element: TypeDeclExpr, endtok: Token, body: Stmt);
+  CommaArray = (element: TypeDeclExpr, commatok: Token, endtok: Token, body: Stmt);
+  LetLoad = (obj: NameLessLetStmt);
+  DotGetRef = (base: Expr, name: Token);
+  Call = (name: Token);
+  CallRawFunc = (func: RawFuncDecl);
+};
+
+type Condition = {
+  Type = (token: Token);
+  String = (token: Token);
+};
+
+type Stmt = {
+  Let = (name: Token, type: TypeDeclExpr, expr: Expr); 
+  NameLessLet = (type: TypeDeclExpr, expr: Expr);
+  Ignore = (expr: Expr);
+  Set = (lhs: Expr, rhs: Expr);
+  Return = (expr: Expr);
+  Unexpected = ();
+  Break = ();
+  Loop = (body: Stmt);
+  Append = (arr: Expr, value: Expr);
+  Compound = (stmts: Array<Stmt>);
+  Case = (cond: Condition, true_stmt: Stmt, false_stmt: Stmt);
+};
+
+raw_func ParseTypeDeclExpr() -> TypeDeclExpr {
+  if peak() == open_paran {
+    return new ProductTypeDeclExpr{
+      ignore expect(open_paran);
+      decls = comma_array(TypeLetDecl, comma, close_paran) {
+        return new TypeLetDecl{
+          name = expect(identifier);
+          ignore expect(colon);
+          type = ParseTypeDeclExpr();
+        };
+      };
+      ignore expect(close_paran);
+    };
+  } else if peak() == open_brace {
+    return new SumTypeDeclExpr{
+      ignore expect(open_brace);
+      decls = concat_array(TypeLetDecl, close_brace) {
+        return new TypeLetDecl{
+          name = expect(identifier);
+          ignore expect(equal);
+          type = ParseTypeDeclExpr();
+          ignore expect(semi);
+        };
+      };
+      ignore expect(close_brace);
+    };
+  } else if peak() == identifier {
+    let expr: NamedTypeDeclExpr = new NamedTypeDeclExpr{
+      name = expect(identifier);
+    };
+    if peak() == open_arr {
+      return new ParametricTypeDeclExpr {
+        base = expr;
+        ignore expect(open_arr);
+        params = comma_array(TypeDeclExpr, comma, close_arr) {
+          return ParseTypeDeclExpr();
+        };
+        ignore expect(close_arr);
+      };
+    }
+    return expr;
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseExpr() -> Expr {
+  if peak() == "raw_new" {
+    ignore expect(identifier);
+    return new RawNewExpr {
+      name = expect(identifier);
+    };
+  } else if peak() == "new" {
+    ignore expect(identifier);
+    return new NewExpr {
+      name = expect(identifier);
+      body = ParseCompoundStmt();
+    };
+  } else if peak() == "expect" {
+    ignore expect(identifier);
+    ignore expect(open_paran);
+    if peak() == str {
+      return new StringExpectExpr {
+        value = expect(str);
+        ignore expect(close_paran);
+      };
+    } else if peak() == identifier {
+      return new TokenExpectExpr {
+        value = expect(identifier);
+        ignore expect(close_paran);
+      };
+    } else {
+      unexpected();
+    }
+  } else if peak() == "concat_array" {
+    return new ConcatArrayExpr {
+      ignore expect(identifier);
+      ignore expect(open_paran);
+      element = ParseTypeDeclExpr();
+      ignore expect(comma);
+      endtok = expect(identifier);
+      ignore expect(close_paran);
+      body = ParseCompoundStmt();
+    };
+  } else if peak() == "comma_array" {
+    return new CommaArrayExpr {
+      ignore expect(identifier);
+      ignore expect(open_paran);
+      element = ParseTypeDeclExpr();
+      ignore expect(comma);
+      commatok = expect(identifier);
+      ignore expect(comma);
+      endtok = expect(identifier);
+      ignore expect(close_paran);
+      body = ParseCompoundStmt();
+    };
+  } else if peak() == identifier {
+    let name: Token = expect(identifier);
+    if peak() == open_paran {
+      return new CallExpr {
+        ignore expect(open_paran);
+        ignore expect(close_paran);
+        name = name;
+      };
+    } else {
+      return new NameExpr {
+        name = name;
+      };
+    }
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseCond() -> Condition {
+  if peak() == "peak" { ignore expect(identifier); 
+  } else { unexpected(); }
+  ignore expect(open_paran);
+  ignore expect(close_paran);
+  ignore expect(equalequal);
+  if peak() == identifier {
+    return new TypeCondition {
+      token = expect(identifier);
+    };
+  } else if peak() == str {
+    return new StringCondition {
+      token = expect(str);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseIfStmt() -> Stmt {
+  return new CaseStmt {
+    cond = ParseCond();
+    true_stmt = ParseCompoundStmt();
+    if peak() == "else" {
+      ignore expect(identifier);
+      if peak() == "if" {
+        ignore expect(identifier);
+        false_stmt = ParseIfStmt();
+      } else {
+        false_stmt = ParseCompoundStmt();
+      }
+    } else {
+      false_stmt = new CompoundStmt {};
+    }
+  };
+}
+
+raw_func ParseStmt() -> Stmt {
+  if peak() == "let" {
+    ignore expect(identifier);
+    return new LetStmt {
+      name = expect(identifier);
+      ignore expect(colon);
+      type = ParseTypeDeclExpr();
+      ignore expect(equal);
+      expr = ParseExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "ignore" {
+    ignore expect(identifier);
+    return new IgnoreStmt {
+      expr = ParseExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "dotset" {
+    ignore expect(identifier);
+    return new SetStmt {
+      lhs = new DotGetRefExpr {
+        base = new NameExpr {
+          name = expect(identifier);
+        };
+        name = expect(identifier);
+      };
+      ignore expect(equal);
+      rhs = ParseExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "hackset" {
+    ignore expect(identifier);
+    return new SetStmt {
+      lhs = new NameExpr {
+        name = expect(identifier);
+      };
+      ignore expect(equal);
+      rhs = ParseExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "append" {
+    ignore expect(identifier);
+    return new AppendStmt {
+      arr = new DotGetRefExpr {
+        base = new NameExpr {
+          name = expect(identifier);
+        };
+        name = expect(identifier);
+      };
+      value = new NameExpr { name = expect(identifier); };
+      ignore expect(semi);
+    };
+  } else if peak() == "break" {
+    ignore expect(identifier);
+    return new BreakStmt{
+      ignore expect(semi);
+    };
+  } else if peak() == "return" {
+    ignore expect(identifier);
+    return new ReturnStmt {
+      expr = ParseExpr();
+      ignore expect(semi);
+    };
+  } else if peak() == "unexpected" {
+    ignore expect(identifier);
+    return new UnexpectedStmt {
+      ignore expect(open_paran);  
+      ignore expect(close_paran);
+      ignore expect(semi);
+    };
+  } else if peak() == "loop" {
+    ignore expect(identifier);
+    return new LoopStmt {
+      body = ParseCompoundStmt();
+    };
+  } else if peak() == "if" {
+    ignore expect(identifier);
+    return ParseIfStmt();
+  } else if peak() == identifier {
+    let tmp_name: Token = expect(identifier);
+    if peak() == equal {
+      ignore expect(equal);
+      return new SetStmt {
+        lhs = new SelfGetExpr {
+          name = tmp_name;
+        };
+        rhs = ParseExpr();
+        ignore expect(semi);
+      };
+    } else {
+      unexpected();
+    }
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseCompoundStmt() -> Stmt {
+  return new CompoundStmt {
+    ignore expect(open_brace);
+    stmts = concat_array(Stmt, close_brace) {
+      return ParseStmt();
+    };
+    ignore expect(close_brace);
+  };
+}

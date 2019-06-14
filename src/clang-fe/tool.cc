@@ -462,6 +462,7 @@ class ClangFeCodeGenAction : public Action {
 };
 
 // Run with:
+// .build/clang-fe src/clang-fe/test/basic.fe src/clang-fe/test/basic.cc
 // clang-6.0 .build/gen/clang-fe/test/basic.o && ./a.out
 int main(int argc, char **argv){
   if (argc <= 1) {

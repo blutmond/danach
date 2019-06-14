@@ -1,0 +1,38 @@
+module example;
+
+regex basic {
+  let digit = "0" : "9";
+  let id = ("a" : "z") | "_" | ("A" : "Z");
+  let all = (" " : "~");
+  emit dot = ".";
+  emit plus = "+";
+  emit pipe = "|";
+  emit star = "*";
+  emit semi = ";";
+  emit open_arr = "<";
+  emit close_arr = ">";
+  emit open_paran = "(";
+  emit close_paran = ")";
+  emit open_brace = "{";
+  emit close_brace = "}";
+  emit arrow = "->";
+  emit colon = ":";
+  emit coloncolon = "::";
+  emit eof = 0;
+  ignore "\n";
+  ignore " ";
+  emit identifier = id . (id | digit)*;
+  emit str = "\"" . (("\\" . all) | (" " : "!") | ("#" : "[") | ("]" : "~"))* . "\"";
+  emit number = digit+;
+}
+
+type RegexExpr = {
+  String = (value: Token);
+  Integer = (value: Token);
+  Named = (name: Token);
+  Range = (st: RegexExpr, ed: RegexExpr);
+  Juxta = (lhs: RegexExpr, rhs: RegexExpr);
+  Alt = (lhs: RegexExpr, rhs: RegexExpr);
+  Star = (base: RegexExpr);
+  Plus = (base: RegexExpr);
+};

@@ -38,5 +38,9 @@ $TOKENIZER_TOOL src/clang-fe/tokenizer clang_fe > .build/gen/clang-fe/tokenizer.
 $PARSER_TOOL src/clang-fe/parser > .build/gen/clang-fe/parser.cc || exit -1
 $CLANG $LLVM_CXX src/clang-fe/tool.cc .build/gen/clang-fe/RunClang.o .build/gen/clang-fe/CodeGenAugment.o $LLVM_LINK -o .build/clang-fe || exit -1
 
+mkdir -p .build/gen/new_parser/ || exit -1
+$TOKENIZER_TOOL src/new_parser/tokenizer parser_spec > .build/gen/new_parser/tokenizer.cc || exit -1
+$PARSER_TOOL src/new_parser/parser > .build/gen/new_parser/parser.cc || exit -1
+$CLANG src/new_parser/tool.cc -o .build/new-parser-gen || exit -1
 
 echo "Success."
