@@ -43,4 +43,9 @@ $TOKENIZER_TOOL src/new_parser/tokenizer parser_spec > .build/gen/new_parser/tok
 $PARSER_TOOL src/new_parser/parser > .build/gen/new_parser/parser.cc || exit -1
 $CLANG src/new_parser/tool.cc -o .build/new-parser-gen || exit -1
 
+mkdir -p .build/gen/tmp_parser/ || exit -1
+$TOKENIZER_TOOL src/tmp_parser/tokenizer production_spec > .build/gen/tmp_parser/tokenizer.cc || exit -1
+$PARSER_TOOL src/tmp_parser/parser > .build/gen/tmp_parser/parser.cc || exit -1
+$CLANG src/tmp_parser/tool.cc -o .build/tmp-parser-gen || exit -1
+
 echo "Success."

@@ -1,0 +1,171 @@
+module production_spec;
+
+type Module = (
+  mod_name : Token,
+  decls : Array<Decl>
+);
+
+type PatternExpr = {
+  Self = ();
+  Named = (name: Token);
+  Concat = (element: PatternStmt);
+  CommaConcat = (comma: Token, element: PatternStmt);
+  New = (type_name: Token, value: PatternStmt);
+};
+
+type PatternStmt = {
+  Compound = (items: Array<PatternStmt>);
+  String = (value: Token);
+  Assign = (name: Token, value: PatternExpr);
+  Wrap = (value: PatternExpr);
+};
+
+type TypeDeclExpr = {
+  Product = (decls: Array<TypeLetDecl>);
+  Sum = (decls: Array<TypeLetDecl>);
+  Named = (name: Token);
+  Parametric = (base: TypeDeclExpr, params: Array<TypeDeclExpr>);
+};
+
+type TypeLetDecl = (name: Token, type: TypeDeclExpr);
+
+type Decl = {
+  Pattern = (name: Token, value: PatternStmt);
+  Expr = (name: Token, stmts: Array<Decl>);
+  Production = (name: Token, stmts: Array<Decl>);
+  ProductionAndType = (name: Token, type_name: Token, stmts: Array<Decl>);
+  Define = (name: Token, value: PatternStmt);
+  Entry = (name: Token);
+  Tokenizer = (name: Token);
+  Type = (name: Token, type: TypeDeclExpr);
+};
+
+raw_func ParseDeclList() -> Array<Decl> {
+  ignore expect(open_brace);
+  let res: Array<Decl> = concat_array(Decl, close_brace) { return ParseDecl(); };
+  ignore expect(close_brace);
+  return res;
+}
+
+raw_func ParsePatternExpr() -> PatternExpr {
+  if peak() == "comma_array" {
+    return new CommaConcatPatternExpr {
+      ignore expect(identifier);
+      ignore expect(open_paran);
+      comma = expect(identifier);
+      ignore expect(close_paran);
+      element = ParseCompoundPatternStmt();
+    };
+  } else if peak() == "concat" {
+    return new ConcatPatternExpr {
+      ignore expect(identifier);
+      element = ParseCompoundPatternStmt();
+    };
+  } else if peak() == "new" {
+    return new NewPatternExpr {
+      ignore expect(identifier);
+      type_name = expect(identifier);
+      value = ParseCompoundPatternStmt();
+    };
+  } else if peak() == "_" {
+    ignore expect(identifier);
+    return new SelfPatternExpr {};
+  } else if peak() == identifier {
+    return new NamedPatternExpr {
+      name = expect(identifier);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func ParseCompoundPatternStmt() -> PatternStmt {
+  return new CompoundPatternStmt {
+    ignore expect(open_brace);
+    items = concat_array(PatternStmt, close_brace) { return ParsePatternStmt(); };
+    ignore expect(close_brace);
+  };
+}
+
+raw_func ParsePatternStmt() -> PatternStmt {
+  if peak() == str {
+    return new StringPatternStmt { value = expect(str); };
+  } else if peak() == percent {
+    ignore expect(percent);
+    return new AssignPatternStmt {
+      name = expect(identifier);
+      ignore expect(equal);
+      value = ParsePatternExpr();
+    };
+  } else {
+    return new WrapPatternStmt {
+      value = ParsePatternExpr();
+    };
+  }
+  unexpected();
+}
+
+raw_func ParseDecl() -> Decl {
+  if peak() == "expr" {
+    ignore expect(identifier);
+    return new ExprDecl {
+      name = expect(identifier);
+      stmts = ParseDeclList();
+    };
+  } else if peak() == "production" {
+    ignore expect(identifier);
+    let name_tmp: Token = expect(identifier);
+    if peak() == ":" {
+      ignore expect(colon);
+      return new ProductionAndTypeDecl {
+        name = name_tmp;
+        type_name = expect(identifier);
+        stmts = ParseDeclList();
+      };
+    } else {
+      return new ProductionDecl {
+        name = name_tmp;
+        stmts = ParseDeclList();
+      };
+    }
+  } else if peak() == "pattern" {
+    ignore expect(identifier);
+    return new PatternDecl {
+      name = expect(identifier);
+      value = ParseCompoundPatternStmt();
+    };
+  } else if peak() == "define" {
+    ignore expect(identifier);
+    return new DefineDecl {
+      name = expect(identifier);
+      value = ParseCompoundPatternStmt();
+    };
+  } else if peak() == "tokenizer" {
+    ignore expect(identifier);
+    return new TokenizerDecl {
+      name = expect(identifier);
+      ignore expect(semi);
+    };
+  } else if peak() == "entry" {
+    ignore expect(identifier);
+    return new EntryDecl {
+      name = expect(identifier);
+      ignore expect(semi);
+    };
+  } else {
+    unexpected();
+  }
+}
+
+raw_func DoParse() -> Module {
+  return new Module {
+    if peak() == "module" {
+      ignore expect(identifier);
+    } else {
+      unexpected();
+    }
+    mod_name = expect(identifier);
+    ignore expect(semi);
+    decls = concat_array(Decl, eof) { return ParseDecl(); };
+  };
+}

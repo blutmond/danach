@@ -1,0 +1,58 @@
+module production_spec;
+
+entry Module;
+tokenizer basic;
+
+expr TypeDeclExpr {
+  pattern Product {
+    "(" %decls = comma_array(comma) {
+      new TypeLetDecl { %name = identifier ":" %type = TypeDeclExpr}
+    } ")" }
+  pattern Sum {
+    "(" %decls = concat {
+      new TypeLetDecl { %name = identifier "=" %type = TypeDeclExpr ";"}
+    } ")" }
+  pattern Named { %name = identifier }
+  pattern Parametric { %base = _ "<" %params = concat { _ } ">" }
+}
+
+production PatternExpr {
+  pattern CommaConcat { "comma_array" "(" %comma = identifier ")"
+    %element = CompoundPatternStmt }
+  pattern Concat { "concat" %element = CompoundPatternStmt }
+  pattern Self { "_" }
+  pattern New { "new" %type_name = identifier
+    %value = CompoundPatternStmt }
+  pattern Named { %name = identifier }
+}
+
+production CompoundPatternStmt: PatternStmt {
+  pattern Compound { "{" %items = concat { PatternStmt } "}" }
+}
+production PatternStmt {
+  pattern String { %value = str }
+  pattern Assign { "%" %name = identifier "=" %value = PatternExpr }
+  pattern Wrap { %value = PatternExpr }
+}
+
+pattern DeclList { "{" concat { Decl } "}" }
+production Decl {
+  pattern Type {"type" %name = identifier "=" %type = TypeDeclExpr ";" }
+  pattern Expr { "expr" %name = identifier %stmts = DeclList }
+  pattern ProductionAndType {
+    "production" %name = identifier ":" %type_name = identifier
+    %stmts = DeclList }
+  pattern Production {
+    "production" %name = identifier %stmts = DeclList }
+  pattern Pattern {
+    "pattern" %name = identifier %value = CompoundPatternStmt }
+  pattern Define {
+    "define"  %name = identifier %value = CompoundPatternStmt }
+  pattern Entry { "entry" %name = identifier ";" }
+  pattern Tokenizer { "tokenizer" %name = identifier ";" }
+}
+
+define Module {
+  "module" %mod_name = identifier ";"
+  %decls = concat { Decl }
+}
