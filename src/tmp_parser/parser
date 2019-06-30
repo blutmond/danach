@@ -32,6 +32,8 @@ type TypeLetDecl = (name: Token, type: TypeDeclExpr);
 type Decl = {
   Pattern = (name: Token, value: PatternStmt);
   Expr = (name: Token, stmts: Array<Decl>);
+  LeftAssoc = (stmts: Array<Decl>);
+  RightAssoc = (stmts: Array<Decl>);
   Production = (name: Token, stmts: Array<Decl>);
   ProductionAndType = (name: Token, type_name: Token, stmts: Array<Decl>);
   Define = (name: Token, value: PatternStmt);
@@ -110,6 +112,16 @@ raw_func ParseDecl() -> Decl {
     ignore expect(identifier);
     return new ExprDecl {
       name = expect(identifier);
+      stmts = ParseDeclList();
+    };
+  } else if peak() == "left" {
+    ignore expect(identifier);
+    return new LeftAssocDecl {
+      stmts = ParseDeclList();
+    };
+  } else if peak() == "right" {
+    ignore expect(identifier);
+    return new RightAssocDecl {
       stmts = ParseDeclList();
     };
   } else if peak() == "production" {

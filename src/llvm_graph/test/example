@@ -1,0 +1,25 @@
+let main = Module("name", scope {
+
+let int_t = IntType(32);
+let bool_t = IntType(1);
+let void_t = VoidType();
+
+silly = ExtFunction("silly", [int_t], bool_t);
+print_int = ExtFunction("print_int", [int_t], void_t);
+
+a = Function("a", [int_t], void_t, scope {
+  let arg0 = Param(a, 0);
+  bb0 = BasicBlock({
+    _0 = Call(silly, arg0);
+    _1 = Cond(_0, bb1, bb2);
+  });
+  bb1 = BasicBlock({
+    _2 = Call(print_int, arg0);
+    _3 = Jump(bb2);
+  });
+  bb2 = BasicBlock({
+    _10 = Return();
+  });
+});
+
+});

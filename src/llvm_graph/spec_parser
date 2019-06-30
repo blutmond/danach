@@ -1,0 +1,46 @@
+module llvm_graph_spec;
+
+entry Module;
+tokenizer basic;
+
+expr TypeRef {
+  pattern Named { %name = identifier }
+  pattern TParametric { %base = _ "<" %params = comma_array(comma) { Expr } ">" }
+}
+
+expr Expr {
+  pattern InlineCpp { "cpp" "(" %value = str ")" }
+  pattern Named { %name = identifier }
+  pattern Call { %base = _ "(" %params = comma_array(comma) { Expr } ")" }
+  left {
+    pattern Dot { %base = _ "." %name = identifier }
+  }
+  right {
+    pattern Assign { %base = _ "=" %value = _ }
+  }
+}
+
+production CompoundStmt: Stmt {
+  pattern Compound { "{" %stmts = concat { Stmt } "}" }
+}
+production Stmt {
+  pattern Return { "return" %expr = Expr ";" }
+  pattern Let { "let" %name = identifier "=" %expr = Expr ";" }
+  pattern For { "for" %name = identifier ":" %sequence = Expr %stmts = CompoundStmt }
+  pattern Implicit { "implicit" %decl = FnArgDecl ";" }
+  pattern Async { "async" %stmts = CompoundStmt }
+  pattern SideEffect { %value = Expr ";" }
+}
+ 
+define FnArgDecl { %name = identifier ":" %type = TypeRef }
+
+production Decl {
+  pattern CppType { "cpp_type" %name = identifier "=" %value = str ";" }
+  pattern PtrCast { "ptr_cast" %sub = identifier "->" %parent = identifier ";" }
+  pattern Ctor { "ctor" %name = identifier "(" %args = comma_array(comma) { FnArgDecl
+  } ")" "->" %ret_t = TypeRef %stmts = CompoundStmt }
+}
+
+define Module {
+  %decls = concat { Decl }
+}

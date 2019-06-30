@@ -66,8 +66,11 @@ struct GotoDFACPPEmitter {
           std::cout << "  if (c ==";
           prettyEmitChar(*tmp->match);
           std::cout << ") { \n";
-          std::cout << " ++cur; \n";
-          std::cout << "c = *cur; \n";
+          // never advance 0.
+          if (*tmp->match != 0) {
+            std::cout << " ++cur; \n";
+            std::cout << "c = *cur; \n";
+          }
           std::cout << " goto bb" << id << "; }\n";
           break;
         } case Edge::Kind::SkipTo:
@@ -454,7 +457,7 @@ struct DeclIndex {
         }
       }
       if (wrapped_t != nullptr && !res->decls.empty()) {
-        std::cerr << "There can only be wrapped type or assign building a struct.\n";
+        std::cerr << "There can only be wrapped type or assign building a struct.:" << self_type_name << "\n";
         exit(-1);
       }
       if (wrapped_t) { return wrapped_t; }
@@ -538,6 +541,12 @@ struct DeclIndex {
     case Decl::Kind::Define:
       IndexConcatSuccessors(reinterpret_cast<DefineDecl*>(decl)->value);
       break;
+    case Decl::Kind::LeftAssoc:
+      for (auto* stmt : reinterpret_cast<LeftAssocDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
+      break;
+    case Decl::Kind::RightAssoc:
+      for (auto* stmt : reinterpret_cast<RightAssocDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
+      break;
     default:
       break;
     }
@@ -586,7 +595,6 @@ struct PatternEmitContext : public EmitContext {
       stream << "  ([&] {\n   std::vector<";
       DumpASTTypes(stream).visitTypeExpr(type);
       stream << "> __current_vector__;\n";
-      stream << "    while (true) {\n";
       auto it = index->concat_successors.find(_expr);
       if (it != index->concat_successors.end()) {
         auto* stmt = it->second;
@@ -601,6 +609,7 @@ struct PatternEmitContext : public EmitContext {
         stream << "    if (!tokens.peak_check(tok::eof))";
       }
       stream << "{\n";
+      stream << "    while (true) {\n";
       stream << " __current_vector__.push_back([&] {";
       {
         PatternEmitContext ext_ctx = Clone();
@@ -615,8 +624,8 @@ struct PatternEmitContext : public EmitContext {
       stream << " }());";
       stream << " if (tokens.peak_check(tok::" << expr->comma.str << ")) {\n";
       stream << "   tokens.expect(tok::" << expr->comma.str << ");\n";
-      stream << " } else { return __current_vector__; }\n";
-      stream << "  }}}())\n";
+      stream << " } else { break; }\n";
+      stream << "  }}return __current_vector__;}())\n";
       break;
     } case PatternExpr::Kind::Concat: {
       auto* expr = reinterpret_cast<ConcatPatternExpr*>(_expr);
@@ -756,6 +765,19 @@ struct ExprProduction : public Production {
       if (!expr) return false;
       return expr->getKind() == PatternExpr::Kind::Self;
     }
+
+    void Populate(const std::vector<Decl*>& decls) {
+      for (auto* decl : decls) {
+        switch (decl->getKind()) {
+        case Decl::Kind::Pattern:
+          patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
+          break;
+        default:
+          std::cerr << "Unknown Decl not handled in expr scope\n";
+          exit(-1);
+        }
+      }
+    }
     
     static OperatorType AnalyizeType(PatternDecl* decl) {
       auto* stmt = reinterpret_cast<CompoundPatternStmt*>(decl->value);
@@ -814,79 +836,134 @@ struct ExprProduction : public Production {
       DumpASTTypes(ctx.stream).visitTypeExpr(type);
       ctx.stream << " expr = nullptr;";
       auto grouped = groups[i].DoGrouping();
-      assert(grouped.binary.size() == 0 && "Binary ops not handled\n");
-
-      for (auto& prefix : grouped.prefix) {
-        PatternEmitContext ext_ctx(ctx);
-        ext_ctx.self_type = name.str;
-        auto* stmt = reinterpret_cast<CompoundPatternStmt*>(prefix->value);
-        assert(ext_ctx.EmitPeakCheck(stmt->items[0]) && "Exhaustive exprs not allowed");
-        std::vector<PatternStmt*> nitems(stmt->items.begin(), stmt->items.end() - 1);
-        for (auto* stmt : nitems) {
-          ext_ctx.EmitToTmp(stmt);
-        }
-        ctx.stream << "  auto* result = new " << prefix->name.str << name.str << ";\n";
-        for (auto* stmt : nitems) {
-          ext_ctx.CopyFromTmp(stmt);
-        }
-        EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
-        ctx.stream << " = ";
-        ctx.stream << " _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
-        ctx.stream << "  expr = result;\n";
-        ctx.stream << " continue;\n";
-        ctx.stream << " }\n";
-      }
-
-      bool first_literal = true;
-      for (auto& literal : grouped.literal) {
-        PatternEmitContext ext_ctx(ctx);
-        ext_ctx.self_type = name.str;
-        auto* stmt = reinterpret_cast<CompoundPatternStmt*>(literal->value);
-        if (!first_literal) ext_ctx.stream << " else ";
-        assert(ext_ctx.EmitPeakCheck(stmt->items[0]) && "Exhaustive exprs not allowed");
-        for (auto* stmt : stmt->items) {
-          ext_ctx.EmitToTmp(stmt);
-        }
-        ctx.stream << "  auto* result = new " << literal->name.str << name.str << ";\n";
-        for (auto* stmt : stmt->items) {
-          ext_ctx.CopyFromTmp(stmt);
-        }
-        ctx.stream << "  expr = result;\n";
-        ctx.stream << " }\n";
-        first_literal = false;
-      }
-
-      if (!first_literal) ctx.stream << " else ";
-      if (i == 0) {
-        ctx.stream << "{ tokens.unexpected(); }\n";
-      } else {
-        ctx.stream << "  {\n";
+      if (!grouped.binary.empty()) {
+        assert(i > 0 && "Binary ops nonsensical on first level");
+        assert(grouped.binary.size() == groups[i].patterns.size() && "Must be all binary or nothing");
         ctx.stream << "     expr = _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
+        if (groups[i].assoc == Group::RightToLeft) {
+          for (auto& binary : grouped.binary) {
+            PatternEmitContext ext_ctx(ctx);
+            ext_ctx.self_type = name.str;
+            auto* stmt = reinterpret_cast<CompoundPatternStmt*>(binary->value);
+            assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
+            std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end() - 1);
+            for (auto* stmt : nitems) {
+              ext_ctx.EmitToTmp(stmt);
+            }
+            ctx.stream << "  auto* result = new " << binary->name.str << name.str << ";\n";
+            for (auto* stmt : nitems) {
+              ext_ctx.CopyFromTmp(stmt);
+            }
+            EmitSelfSetRef(ctx, stmt->items[0]);
+            ctx.stream << " = expr;\n";
+            EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
+            ctx.stream << " = ";
+            ctx.stream << " _production_" << name.str << "_group_" << (i) << "(tokens);\n";
+            ctx.stream << " return result;\n";
+            ctx.stream << " }\n";
+          }
+        } else {
+          assert(groups[i].assoc == Group::LeftToRight && "Binary ops must have associativity");
+          ctx.stream << "while (true) {\n";
+          for (auto& binary : grouped.binary) {
+            PatternEmitContext ext_ctx(ctx);
+            ext_ctx.self_type = name.str;
+            auto* stmt = reinterpret_cast<CompoundPatternStmt*>(binary->value);
+            assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
+            std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end() - 1);
+            for (auto* stmt : nitems) {
+              ext_ctx.EmitToTmp(stmt);
+            }
+            ctx.stream << "  auto* result = new " << binary->name.str << name.str << ";\n";
+            for (auto* stmt : nitems) {
+              ext_ctx.CopyFromTmp(stmt);
+            }
+            EmitSelfSetRef(ctx, stmt->items[0]);
+            ctx.stream << " = expr;\n";
+            EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
+            ctx.stream << " = ";
+            ctx.stream << " _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
+            ctx.stream << " expr = result;";
+            ctx.stream << " continue;";
+            ctx.stream << " }\n";
+            ctx.stream << " break;\n";
+          }
+          ctx.stream << " }\n";
+        }
+        ctx.stream << "  return expr;\n}\n";
+      } else {
+        assert(grouped.binary.size() == 0 && "Binary ops not handled\n");
+        for (auto& prefix : grouped.prefix) {
+          PatternEmitContext ext_ctx(ctx);
+          ext_ctx.self_type = name.str;
+          auto* stmt = reinterpret_cast<CompoundPatternStmt*>(prefix->value);
+          assert(ext_ctx.EmitPeakCheck(stmt->items[0]) && "Exhaustive exprs not allowed");
+          std::vector<PatternStmt*> nitems(stmt->items.begin(), stmt->items.end() - 1);
+          for (auto* stmt : nitems) {
+            ext_ctx.EmitToTmp(stmt);
+          }
+          ctx.stream << "  auto* result = new " << prefix->name.str << name.str << ";\n";
+          for (auto* stmt : nitems) {
+            ext_ctx.CopyFromTmp(stmt);
+          }
+          EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
+          ctx.stream << " = ";
+          ctx.stream << " _production_" << name.str << "_group_" << (i) << "(tokens);\n";
+          ctx.stream << " return result;\n";
+          ctx.stream << " }\n";
+        }
+
+        bool first_literal = true;
+        for (auto& literal : grouped.literal) {
+          PatternEmitContext ext_ctx(ctx);
+          ext_ctx.self_type = name.str;
+          auto* stmt = reinterpret_cast<CompoundPatternStmt*>(literal->value);
+          if (!first_literal) ext_ctx.stream << " else ";
+          assert(ext_ctx.EmitPeakCheck(stmt->items[0]) && "Exhaustive exprs not allowed");
+          for (auto* stmt : stmt->items) {
+            ext_ctx.EmitToTmp(stmt);
+          }
+          ctx.stream << "  auto* result = new " << literal->name.str << name.str << ";\n";
+          for (auto* stmt : stmt->items) {
+            ext_ctx.CopyFromTmp(stmt);
+          }
+          ctx.stream << "  expr = result;\n";
+          ctx.stream << " }\n";
+          first_literal = false;
+        }
+
+        if (!first_literal) ctx.stream << " else ";
+        if (i == 0) {
+          ctx.stream << "{ tokens.unexpected(); }\n";
+        } else {
+          ctx.stream << "  {\n";
+          ctx.stream << "     expr = _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
+          ctx.stream << "  }\n";
+        }
+
+        ctx.stream << "  while (true) {\n";
+        for (auto& postfix : grouped.postfix) {
+          PatternEmitContext ext_ctx(ctx);
+          ext_ctx.self_type = name.str;
+          auto* stmt = reinterpret_cast<CompoundPatternStmt*>(postfix->value);
+          assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
+          std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end());
+          for (auto* stmt : nitems) {
+            ext_ctx.EmitToTmp(stmt);
+          }
+          ctx.stream << "  auto* result = new " << postfix->name.str << name.str << ";\n";
+          for (auto* stmt : nitems) {
+            ext_ctx.CopyFromTmp(stmt);
+          }
+          EmitSelfSetRef(ctx, stmt->items[0]);
+          ctx.stream << " = expr;\n";
+          ctx.stream << "  expr = result;\n";
+          ctx.stream << " continue;\n";
+          ctx.stream << " }\n";
+        }
+        ctx.stream << "  return expr;\n}\n";
         ctx.stream << "  }\n";
       }
-
-      ctx.stream << "  while (true) {\n";
-      for (auto& postfix : grouped.postfix) {
-        PatternEmitContext ext_ctx(ctx);
-        ext_ctx.self_type = name.str;
-        auto* stmt = reinterpret_cast<CompoundPatternStmt*>(postfix->value);
-        assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
-        std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end());
-        for (auto* stmt : nitems) {
-          ext_ctx.EmitToTmp(stmt);
-        }
-        ctx.stream << "  auto* result = new " << postfix->name.str << name.str << ";\n";
-        for (auto* stmt : nitems) {
-          ext_ctx.CopyFromTmp(stmt);
-        }
-        EmitSelfSetRef(ctx, stmt->items[0]);
-        ctx.stream << " = expr;\n";
-        ctx.stream << "  expr = result;\n";
-        ctx.stream << " continue;\n";
-        ctx.stream << " }\n";
-      }
-      ctx.stream << "  }\n";
-      ctx.stream << "  return expr;\n}\n";
     }
     DumpASTTypes(ctx.stream).visitTypeExpr(type);
     ctx.stream << " _production_" << name.str << "(Tokenizer& tokens) {\n";
@@ -1207,6 +1284,30 @@ void Emit(Module* m, const parser_spec::TokenizerModuleIndex& token_index) {
         case Decl::Kind::Pattern:
           tmp_group.patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
           break;
+        case Decl::Kind::LeftAssoc: {
+          if (!tmp_group.patterns.empty()) {
+            expr->groups.push_back(std::move(tmp_group));
+          }
+          ExprProduction::Group lhs_group;
+          lhs_group.assoc = ExprProduction::Group::LeftToRight;
+          lhs_group.Populate(reinterpret_cast<LeftAssocDecl*>(decl)->stmts);
+          assert(!lhs_group.patterns.empty());
+          expr->groups.push_back(std::move(lhs_group));
+          tmp_group = ExprProduction::Group();
+          break;
+        }
+        case Decl::Kind::RightAssoc: {
+          if (!tmp_group.patterns.empty()) {
+            expr->groups.push_back(std::move(tmp_group));
+          }
+          ExprProduction::Group rhs_group;
+          rhs_group.assoc = ExprProduction::Group::RightToLeft;
+          rhs_group.Populate(reinterpret_cast<RightAssocDecl*>(decl)->stmts);
+          assert(!rhs_group.patterns.empty());
+          expr->groups.push_back(std::move(rhs_group));
+          tmp_group = ExprProduction::Group();
+          break;
+        }
         default:
           std::cerr << "Unknown Decl not handled in expr scope\n";
           exit(-1);

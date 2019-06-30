@@ -1,0 +1,84 @@
+cpp_type IntegerType = "llvm::IntegerType*";
+cpp_type Type = "llvm::Type*";
+cpp_type FunctionType = "llvm::FunctionType*";
+cpp_type Module = "llvm::Module*";
+cpp_type Value = "llvm::Value*";
+cpp_type BasicBlock = "llvm::BasicBlock*";
+cpp_type Instruction = "llvm::Instruction*";
+
+ptr_cast IntegerType -> Type;
+ptr_cast FunctionType -> Type;
+ptr_cast BasicBlock -> Value;
+ptr_cast Instruction -> Value;
+ptr_cast Function -> Value;
+
+ctor Module(name: string, blocks: list) -> Module {
+  let module = cpp("CreateLLVMModule")(name, LLVM_CTX);
+  for i : blocks {
+    i.implicit_module = module;
+  }
+  return module;
+}
+
+ctor IntType(i: int) -> IntegerType {
+  return cpp("llvm::Type::getIntNTy")(LLVM_CTX, i);
+}
+
+ctor VoidType() -> Type {
+  return cpp("llvm::Type::getVoidTy")(LLVM_CTX);
+}
+
+ctor FunctionType(args: list<Type>, ret_t: Type) -> FunctionType {
+  return cpp("llvm::FunctionType::get")(ret_t, args, cpp("false"));
+}
+
+ctor ExtFunction(name: string, args: list<Type>, ret_t: Type) -> Function {
+  implicit implicit_module: Module;
+  let fn_ty = FunctionType(args, ret_t);
+  return cpp("llvm::Function::Create")(fn_ty,
+                  cpp("llvm::Function::ExternalLinkage"),
+                  name, implicit_module);
+}
+
+ctor BasicBlock(insts: list<Instruction>) -> BasicBlock {
+  let res = cpp("llvm::BasicBlock::Create")(LLVM_CTX);
+  async {
+    for i : insts {
+      cpp("InsertInstructionIntoBlock")(res, i);
+    }
+  }
+  return res;
+}
+
+ctor Cond(cond: Value, true_blk: BasicBlock, false_blk: BasicBlock) -> Instruction {
+  return cpp("llvm::BranchInst::Create")(true_blk, false_blk,  cond);
+}
+
+ctor Jump(blk: BasicBlock) -> Instruction {
+  return cpp("llvm::BranchInst::Create")(blk);
+}
+
+ctor Call(fn: Value, args: list<Value>) -> Instruction {
+  return cpp("llvm::CallInst::Create")(fn, args);
+}
+
+ctor Return() -> Instruction {
+  return cpp("llvm::ReturnInst::Create")(LLVM_CTX);
+}
+
+ctor Param(fn: Function, i: int) -> Value {
+  return cpp("GetLLVMParameter")(fn, i);
+}
+
+ctor Function(name: string, args: list<Type>, ret_t: Type, blocks: list<BasicBlock>) -> Function {
+  implicit implicit_module: Module;
+  let fn_ty = FunctionType(args, ret_t);
+  let res = cpp("llvm::Function::Create")(fn_ty, cpp("llvm::Function::ExternalLinkage"),
+                  name, implicit_module);
+  async {
+    for block : blocks {
+      cpp("InsertLLVMBlock")(block, res);
+    }
+  }
+  return res;
+}

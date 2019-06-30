@@ -1,0 +1,28 @@
+module llvm_graph;
+
+entry Module;
+tokenizer basic;
+
+expr Expr {
+  pattern ScopeBlock { "scope" "{" %decls = concat { Decl } "}" }
+  pattern Str { %value = str }
+  pattern Number { %value = number }
+  pattern Named { %name = identifier }
+  pattern Array { "[" %elements = comma_array(comma) { Expr } "]" }
+  pattern Block { "{" %decls = concat { Decl } "}" }
+  left {
+    pattern Call { %base = _ "(" %params = comma_array(comma) { Expr } ")" }
+  }
+  right {
+    pattern Assign { %base = _ "=" %value = _ }
+  }
+}
+
+production Decl {
+  pattern Let { "let" %name = identifier "=" %expr = Expr ";" }
+  pattern Value { %expr = Expr ";" }
+}
+
+define Module {
+  %decls = concat { Decl }
+}
