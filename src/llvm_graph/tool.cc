@@ -2,7 +2,7 @@
 #include <functional>
 #include <unordered_map>
 #include <sstream>
-#include "tokens/tokenizer_helper.cc"
+#include "parser/tokenizer_helper.cc"
 #include "gen/llvm_graph/spec_parser.cc"
 #include "gen/llvm_graph/graph_parser.cc"
 

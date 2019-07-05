@@ -220,6 +220,9 @@ struct LoweringToNFA {
         pair.ed = edge->next;
       }
       return pair;
+    } case RegexExpr::Kind::Wrapped: {
+      auto wrap = reinterpret_cast<WrappedRegexExpr*>(expr);
+      return visit(lets, wrap->value);
     } case RegexExpr::Kind::Integer: {
       auto str = reinterpret_cast<IntegerRegexExpr*>(expr)->value;
       NodePair pair = {new Node, new Node};

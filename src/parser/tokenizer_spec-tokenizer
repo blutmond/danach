@@ -9,12 +9,15 @@ regex basic {
   emit pipe = "|";
   emit star = "*";
   emit semi = ";";
+  emit comma = ",";
+  emit equal = "=";
   emit open_arr = "<";
   emit close_arr = ">";
   emit open_paran = "(";
   emit close_paran = ")";
   emit open_brace = "{";
   emit close_brace = "}";
+  emit percent = "%";
   emit arrow = "->";
   emit colon = ":";
   emit coloncolon = "::";
@@ -25,14 +28,3 @@ regex basic {
   emit str = "\"" . (("\\" . all) | (" " : "!") | ("#" : "[") | ("]" : "~"))* . "\"";
   emit number = digit+;
 }
-
-type RegexExpr = {
-  String = (value: Token);
-  Integer = (value: Token);
-  Named = (name: Token);
-  Range = (st: RegexExpr, ed: RegexExpr);
-  Juxta = (lhs: RegexExpr, rhs: RegexExpr);
-  Alt = (lhs: RegexExpr, rhs: RegexExpr);
-  Star = (base: RegexExpr);
-  Plus = (base: RegexExpr);
-};

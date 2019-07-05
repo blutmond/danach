@@ -1,7 +1,5 @@
-CLANG="/usr/bin/clang-6.0 -Wall -std=c++17 -lstdc++ -I .build -I src"
+CLANG="/usr/bin/clang-6.0 -Wall -std=c++17 -lstdc++ -I .build -I .build/src-copy"
 
-curl -s -L https://github.com/blutmond/danach/releases/download/v0.0.0/bootstrapping_release.tar.gz | tar -xvz
-$CLANG src/tokens/tool.cc -o .build/tokenizer-gen || exit -1
-$CLANG src/parser/tool.cc -o .build/parser-gen || exit -1
-$CLANG src/cpp_subset/tool.cc -o .build/cpp_subset-gen || exit -1
-$CLANG .build/gen/rules/tool.cc -o .build/rule-apply || exit -1
+curl -s -L https://github.com/blutmond/danach/releases/download/v0.0.1/bootstrapping_release.tar.gz | tar -xvz
+$CLANG .build/src-copy/parser/tool.cc -o .build/parser || exit -1
+rm -rf .build/src-copy || exit -1

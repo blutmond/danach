@@ -10,7 +10,7 @@
 
 using std::experimental::string_view;
 
-#include "tokens/line_number_helper.cc"
+#include "parser/line_number_helper.cc"
 
 std::string LoadFile(const std::string& filename) {
   std::ifstream in(filename, std::ios::in | std::ios::binary);

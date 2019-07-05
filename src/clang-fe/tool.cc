@@ -7,9 +7,8 @@
 #include "llvm/ADT/StringRef.h"
 using std::experimental::string_view;
 
-#include "tokens/line_number_helper.cc"
-#include "gen/clang-fe/tokenizer.cc"
-#include "gen/clang-fe/parser.cc"
+#include "parser/line_number_helper.cc"
+#include "gen/clang-fe/clang-fe-parser.cc"
 
 #include "clang-fe/CodeGenAugment.h"
 #include "clang-fe/RunClang.h"

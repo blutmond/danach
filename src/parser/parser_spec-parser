@@ -9,9 +9,9 @@ expr TypeDeclExpr {
       new TypeLetDecl { %name = identifier ":" %type = TypeDeclExpr}
     } ")" }
   pattern Sum {
-    "(" %decls = concat {
+    "{" %decls = concat {
       new TypeLetDecl { %name = identifier "=" %type = TypeDeclExpr ";"}
-    } ")" }
+    } "}" }
   pattern Named { %name = identifier }
   pattern Parametric { %base = _ "<" %params = concat { _ } ">" }
 }
@@ -46,6 +46,8 @@ production Decl {
     "production" %name = identifier %stmts = DeclList }
   pattern Pattern {
     "pattern" %name = identifier %value = CompoundPatternStmt }
+  pattern LeftAssoc { "left" %stmts = DeclList }
+  pattern RightAssoc { "right" %stmts = DeclList }
   pattern Define {
     "define"  %name = identifier %value = CompoundPatternStmt }
   pattern Entry { "entry" %name = identifier ";" }

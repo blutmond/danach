@@ -1,0 +1,50 @@
+module parser_spec;
+tokenizer basic;
+entry Module;
+
+
+
+type Edge = {
+  Range = (start: char, end: char, next: Node);
+  Unary = (match: char, next: Node);
+  SkipTo = (next: Node);
+  Emit = (name: Token);
+  Ignore = ();
+  Unexpected = ();
+};
+
+expr RegexExpr {
+  pattern Integer { %value = number }
+  pattern String { %value = str }
+  left { pattern Range { %st = _ ":" %ed = _ } }
+  pattern Named { %name = identifier }
+  pattern Wrapped { "(" %value = RegexExpr ")" }
+  pattern Star { %base = _ "*" }
+  pattern Plus { %base = _ "+" }
+  left { pattern Juxta { %lhs = _ "." %rhs = _ } }
+  left { pattern Alt { %lhs = _ "|" %rhs = _ } }
+}
+
+production TokenDecl {
+  pattern Let { "let" %name = identifier "=" %value = RegexExpr ";" }
+  pattern Emit { "emit" %name = identifier "=" %value = RegexExpr ";" }
+  pattern Ignore { "ignore" %value = RegexExpr ";" }
+  pattern Import { "import" %module = identifier "." %name = identifier ";" }
+}
+
+production Edge {
+}
+
+define Node {
+  %edges = concat { Edge }
+}
+
+production Decl {
+  pattern Regex { "regex" %name = identifier "{" %items = concat { TokenDecl } "}" }
+  pattern NFAGraph { "nfa_grap" %name = identifier "=" %root = Node ";" }
+}
+
+define Module {
+  "module" %mod_name = identifier ";"
+  %decls = concat { Decl }
+}

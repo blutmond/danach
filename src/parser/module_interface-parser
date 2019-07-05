@@ -1,0 +1,25 @@
+module module_interface;
+
+tokenizer basic;
+entry Module;
+
+expr TypeRef {
+  pattern NameGet { %base = _ "::" %name = identifier }
+  pattern Named { %name = identifier }
+  pattern Parametric { %base = _ "<" %params = concat { TypeRef } ">" }
+}
+
+define ParameterDef {
+  %name = identifier ":" %type = TypeRef 
+}
+
+production Decl {
+  pattern Func { "func" %name = identifier "("
+    %params = comma_array(comma) { ParameterDef }
+  ")" "->" %ret_t = TypeRef "=" %cname = identifier ";" }
+}
+
+define Module {
+  "module" %module = identifier ";"
+  %decls = concat { Decl }
+}
