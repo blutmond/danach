@@ -1,1388 +1,810 @@
+#include <assert.h>
+// Most of this file can and should be folded back in as
+// "lowering" code, but might need some features for that...
 #include "parser/tokenizer_helper.cc"
 #include "gen/parser/parser-spec.cc"
 #include "gen/parser/tokenizer-spec.cc"
-#include "parser/regex_nfa_to_dfa.cc"
-
+#include <unordered_map>
+#include <unordered_set>
 #include <assert.h>
 #include <memory>
 #include <map>
-
-namespace parser_spec {
-
-struct GotoDFACPPEmitter {
-  int id_assign = 0;
-  std::vector<std::pair<Node*, int>> work_list;
-  std::map<Node*, int> assigned;
-
-  int getId(Node* node) {
-    auto it = assigned.find(node);
-    if (it != assigned.end()) return it->second;
-    int id = id_assign;
-    ++id_assign;
-    assigned[node] = id;
-    work_list.push_back({node, id});
-    return id;
-  }
-  void prettyEmitChar(char c) {
-    if (c == '\\') {
-      std::cout << "'\\\\'";
-      return;
-    }
-    if (std::isprint(c)) {
-      std::cout << "'" << c << "'";
-      return;
-    } else {
-      std::cout << (int)c;
-    }
-  }
-  void emitRoot(Node* node) {
-    getId(node);
-    emitAll();
-  }
-  void emitAll() {
-    while (!work_list.empty()) {
-      auto* node = work_list.back().first;
-      std::cout << "bb" << work_list.back().second << ":\n";
-      work_list.pop_back();
-      for (auto* edge: node->edges) {
-        switch (edge->getKind()) {
-        case Edge::Kind::Range: {
-          auto* tmp = reinterpret_cast<RangeEdge*>(edge);
-          int id = getId(tmp->next);
-          std::cout << "  if (c >= ";
-          prettyEmitChar(*tmp->start);
-          std::cout << " && c <= ";
-          prettyEmitChar(*tmp->end);
-          std::cout << ") { \n";
-          std::cout << " ++cur; \n";
-          std::cout << "c = *cur; \n";
-          std::cout << " goto bb" << id << "; }\n";
-          break;
-        } case Edge::Kind::Unary: {
-          auto* tmp = reinterpret_cast<UnaryEdge*>(edge);
-          int id = getId(tmp->next);
-          std::cout << "  if (c ==";
-          prettyEmitChar(*tmp->match);
-          std::cout << ") { \n";
-          // never advance 0.
-          if (*tmp->match != 0) {
-            std::cout << " ++cur; \n";
-            std::cout << "c = *cur; \n";
-          }
-          std::cout << " goto bb" << id << "; }\n";
-          break;
-        } case Edge::Kind::SkipTo:
-          fprintf(stderr, "Un-eliminated skip-to\n");
-          exit(-1);
-          break;
-        case Edge::Kind::Emit:
-          std::cout << "  return MakeToken(tok::" <<
-              reinterpret_cast<EmitEdge*>(edge)->name.str <<
-              ", st, cur);\n";
-          break;
-        case Edge::Kind::Ignore:
-          std::cout << "  goto start;\n";
-          break;
-        case Edge::Kind::Unexpected:
-          std::cout << "  unexpected(c);\n";
-          break;
-        }
-      }
-    }
-  }
-};
-
-struct TokenizerIndex {
-  NFAGraphDecl* decl;
-
-  std::set<string_view> all_tokens;
-  TokenizerIndex(NFAGraphDecl* decl) : decl(decl) {
-    std::set<Node*> visited;
-    std::vector<Node*> work_list = {decl->root};
-    while (!work_list.empty()) {
-      auto* nxt = work_list.back();
-      work_list.pop_back();
-      auto add_item = [&](Node* n) {
-        if (visited.find(n) == visited.end()) {
-          work_list.push_back(n);
-          visited.insert(n);
-        }
-      };
-      for (auto* edge : nxt->edges) {
-        switch (edge->getKind()) {
-        case Edge::Kind::Range:
-          add_item(reinterpret_cast<RangeEdge*>(edge)->next);
-          break;
-        case Edge::Kind::Unary:
-          add_item(reinterpret_cast<UnaryEdge*>(edge)->next);
-          break;
-        case Edge::Kind::Emit:
-          all_tokens.insert(reinterpret_cast<EmitEdge*>(edge)->name.str);
-          break;
-        default:
-          break;
-        }
-      }
-    }
-//    for (auto token : all_tokens) { std::cout << "Found token: \"" << token << "\"\n"; }
-  }
-
-  bool isToken(string_view str) const { return all_tokens.find(str) != all_tokens.end(); }
-
-  void Emit(std::ostream& stream) const {
-    stream << "namespace tok {\n";
-    stream << "enum T {";
-    bool first = false;
-    for (auto& name : all_tokens) {
-      if (first) stream << ", ";
-      stream << name;
-      first = true;
-    }
-    stream << "};\n";
-    stream << "const char* StringifyType(T t) {\n";
-    stream << "switch(t) {\n";
-    for (auto& name : all_tokens) {
-      stream << "case " << name << ": return \"" << name << "\";";
-    }
-    stream << "}\n";
-    stream << "}\n";
-    stream << R"(
-struct Token {
-  T type = tok::eof;
-  string_view str;
-};
-
-Token MakeToken(T t, const char* st, const char* ed) {
-  return Token{t, string_view(st, ed - st)};
-}
-
-void PrintToken(Token t) {
-  std::cout << "tok::" << StringifyType(t.type) << " : \"" << t.str << "\"\n";
-}
-
-void unexpected(char c) {
-  fprintf(stderr, "unexpected: \"%c\"\n", c);
-  exit(-1);
-}
-
-Token GetNext(const char*& cur) {
-    const char* st;
-    int c;
-  start:
-    st = cur;
-    c = *cur;
-    goto bb0;
-)";
-
-    GotoDFACPPEmitter().emitRoot(decl->root);
-
-    stream << "}\n";
-
-    stream << "} // namespace tok\n";
-    stream << R"(
-struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
-    start = cursor;
-    current = tok::GetNext(cursor);
-  }
-  tok::Token peak() {
-    return current;
-  }
-  tok::Token next() {
-    auto res = current;
-    current = tok::GetNext(cursor);
-    return res;
-  }
-  tok::Token expect(tok::T t) {
-    auto res = next();
-    if (t != res.type) {
-      auto pos = GetLineInfo(start, res.str.data());
-      fprintf(stderr, "error:%d:%d: expected: tok::%s but got:", pos.line, pos.col, tok::StringifyType(t));
-      std::cerr << "tok::" << StringifyType(res.type) << " : \"" << res.str << "\"\n";
-      exit(-1);
-    }
-    return res;
-  }
-  tok::Token expect(const char* c) {
-    auto res = next();
-    if (c != res.str) {
-      auto pos = GetLineInfo(start, res.str.data());
-      fprintf(stderr, "error:%d:%d: expected: \"%s\" but got:", pos.line, pos.col, c);
-      std::cerr << "tok::" << StringifyType(res.type) << " : \"" << res.str << "\"\n";
-      exit(-1);
-    }
-    return res;
-  }
-  bool peak_check_str(const char* str) {
-    return peak().str == str;
-  }
-  bool peak_check(tok::T type) {
-    return peak().type == type;
-  }
-  void unexpected() __attribute__ ((__noreturn__)) {
-    unexpected(peak());
-  }
-  void unexpected(tok::Token tok) __attribute__ ((__noreturn__)) {
-    auto pos = GetLineInfo(start, tok.str.data());
-    fprintf(stderr, "error:%d:%d: unexpected:", pos.line, pos.col);
-    std::cerr << "tok::" << StringifyType(tok.type) << " : \"" << tok.str << "\"\n";
-    exit(-1);
-  }
-
- private:
-  const char* start;
-  const char* cursor;
-  tok::Token current;
-};
-)";
-  }
-};
-
-struct TokenizerModuleIndex {
-  TokenizerModuleIndex(Module* m) {
-    for (auto* decl : m->decls) {
-      if (decl->getKind() == Decl::Kind::NFAGraph) {
-        auto* nfa_decl = reinterpret_cast<NFAGraphDecl*>(decl);
-        tokenizers[nfa_decl->name.str].reset(new TokenizerIndex(nfa_decl));
-      }
-    }
-  }
-  std::map<string_view, std::unique_ptr<TokenizerIndex>> tokenizers;
-
-  void EmitTokenizer(string_view str, std::ostream& stream) const {
-    auto it = tokenizers.find(str);
-    if (it == tokenizers.end()) {
-      std::cerr << "No such tokenizer: " << str << "\n";
-      exit(-1);
-    }
-    it->second->Emit(stream);
-  }
-};
-
-}  // namespace parser_spec
-
+#include <set>
+#include "parser/regex_nfa_to_dfa.cc"
+#include "parser/goto_dfa_emitter.cc"
 namespace production_spec {
-#include "parser/dump_types.cc"
 
-NamedTypeDeclExpr* BuiltinName(string_view name) {
-  auto* res = new NamedTypeDeclExpr;
-  res->name.str = name;
-  res->name.type = tok::identifier;
-  return res;
+PatternExpr* getValue(PatternStmt* s);
+PatternStmt* findSuccessor(PatternStmt* s);
+
+struct ModuleContext {
+  std::set<string_view> all_tokens;
+
+  bool isToken(string_view name) {
+    return all_tokens.find(name) != all_tokens.end();
+  }
+
+  std::unordered_map<PatternExpr*, PatternStmt*> concat_successors; 
+
+  std::map<string_view, DefineWithTypeDecl*> productions;
+
+  void RegisterForTypeChecking(DefineWithTypeDecl* decl) {
+    assert(productions.find(decl->name.str) == productions.end());
+    productions[decl->name.str] = decl;
+  }
+
+  std::unordered_map<PatternStmt*, TypeDeclExpr*> types_cache;
+
+  TypeDeclExpr* CacheType(PatternStmt* s, TypeDeclExpr* t) {
+    types_cache[s] = t;
+    return t;
+  }
+
+  Module* m;
+
+  std::map<string_view, TypeDecl*> known_types;
+
+  ProductTypeDeclExpr* MakeStructType(TypeDeclExpr* struct_typeref,
+                                      ProductTypeDeclExpr** new_type) {
+    if (struct_typeref->getKind() == TypeDeclExpr::Kind::Named) {
+      auto* ref = reinterpret_cast<NamedTypeDeclExpr*>(struct_typeref);
+      auto it = known_types.find(ref->name.str);
+      if (it == known_types.end()) {
+        auto* res = *new_type = new ProductTypeDeclExpr;
+        auto* decl = new TypeDecl;
+        decl->name = ref->name;
+        decl->type = res;
+        known_types[ref->name.str] = decl;
+        m->decls.push_back(decl);
+        return nullptr;
+      }
+      auto* res = it->second->type;
+      assert(res->getKind() == TypeDeclExpr::Kind::Product);
+      return reinterpret_cast<ProductTypeDeclExpr*>(res);
+    } else if (struct_typeref->getKind() == TypeDeclExpr::Kind::Colon) {
+      auto* ref = reinterpret_cast<ColonTypeDeclExpr*>(struct_typeref);
+      auto* base = MakeEnumType(ref->base);
+      for (auto* subdecl : base->decls) {
+        if (subdecl->name.str == ref->name.str) {
+          auto* res = subdecl->type;
+          assert(res->getKind() == TypeDeclExpr::Kind::Product);
+          return reinterpret_cast<ProductTypeDeclExpr*>(res);
+        }
+      }
+      auto* res = *new_type = new ProductTypeDeclExpr;
+      auto* entry = new TypeLetDecl;
+      entry->name = ref->name;
+      entry->type = res;
+      base->decls.push_back(entry);
+      return nullptr;
+    }
+    assert(false);
+  }
+  
+  SumTypeDeclExpr* MakeEnumType(TypeDeclExpr* struct_typeref) {
+    if (struct_typeref->getKind() == TypeDeclExpr::Kind::Named) {
+      auto* ref = reinterpret_cast<NamedTypeDeclExpr*>(struct_typeref);
+      auto it = known_types.find(ref->name.str);
+      if (it == known_types.end()) {
+        auto* res = new SumTypeDeclExpr;
+        auto* decl = new TypeDecl;
+        decl->name = ref->name;
+        decl->type = res;
+        known_types[ref->name.str] = decl;
+        m->decls.push_back(decl);
+        return res;
+      }
+      auto* res = it->second->type;
+      assert(res->getKind() == TypeDeclExpr::Kind::Sum);
+      return reinterpret_cast<SumTypeDeclExpr*>(res);
+    }
+    assert(false);
+  }
+
+  void RegisterType(TypeDecl* decl) {
+    assert(known_types.find(decl->name.str) == known_types.end());
+    known_types[decl->name.str] = decl;
+  }
+
+  TypeDeclExpr* getType(string_view name);
+
+  void typeCheckAll();
+};
+
+PatternStmt* RotateFront(CompoundPatternStmt* stmt);
+
+PatternStmt* RotateFront(PatternExpr*& expr) {
+  switch (expr->getKind()) {
+  case PatternExpr::Kind::CommaConcat:
+  case PatternExpr::Kind::Concat:
+    std::cerr << "Not supported rotating Concat...\n";
+    exit(-1);
+  case PatternExpr::Kind::Named:
+  case PatternExpr::Kind::Self: {
+    auto* res = new PushPatternStmt;
+    res->value = expr;
+    expr = new PopPatternExpr;
+    return res;
+  } case PatternExpr::Kind::New: {
+    auto* cexpr = reinterpret_cast<NewPatternExpr*>(expr);
+    assert(cexpr->value->getKind() == PatternStmt::Kind::Compound);
+    return RotateFront(
+        reinterpret_cast<CompoundPatternStmt*>(cexpr->value));
+  } case PatternExpr::Kind::Pop:
+    return nullptr;
+  }
 }
 
-struct DeclIndex;
-
-struct EmitContext {
-  std::ostream& stream;
-  DeclIndex* index;
-  explicit EmitContext(std::ostream& stream) : stream(stream) {}
-
-};
-
-struct Production {
-  virtual ~Production() {}
-  tok::Token name;
-  virtual void DoEmit(EmitContext& decl_index) const = 0;
-  virtual void DoEmitFwd(EmitContext& decl_index) const = 0;
-  virtual void CollectType(DeclIndex* decl_index) const = 0;
-  virtual TypeDeclExpr* ReferenceTypeDeclExpr(DeclIndex* decl_index) const; 
-};
-
-PatternExpr* GetValue(PatternStmt* stmt) {
-  if (stmt->getKind() == PatternStmt::Kind::Assign) {
-    return reinterpret_cast<AssignPatternStmt*>(stmt)->value;
-  }
-  if (stmt->getKind() == PatternStmt::Kind::Wrap) {
-    return reinterpret_cast<WrapPatternStmt*>(stmt)->value;
+PatternStmt* RotateFront(CompoundPatternStmt* stmt) {
+  // if isCleanSuccessor(stmt->items[0]) return stmt;
+  for (size_t i = 0; i < stmt->items.size(); ++i) {
+    auto* item = stmt->items[i];
+    switch (item->getKind()) {
+    case PatternStmt::Kind::Compound:
+      return RotateFront(reinterpret_cast<CompoundPatternStmt*>(item));
+      break;
+    case PatternStmt::Kind::String:
+    case PatternStmt::Kind::Push:
+      stmt->items.erase(stmt->items.begin() + i);
+      return item;
+      break;
+    case PatternStmt::Kind::Assign: {
+      auto* cstmt = reinterpret_cast<AssignPatternStmt*>(item);
+      if (auto* res = RotateFront(cstmt->value)) return res;
+      break;
+    } case PatternStmt::Kind::Wrap: {
+      auto* cstmt = reinterpret_cast<WrapPatternStmt*>(item);
+      if (auto* res = RotateFront(cstmt->value)) return res;
+      break;
+    } case PatternStmt::Kind::Merge:
+      std::cerr << "Not supported!!\n";
+      exit(-1);
+      break;
+    case PatternStmt::Kind::ExprTailLoop:
+      std::cerr << "Not supported rotating ExprTailLoop\n";
+      exit(-1);
+      break;
+    case PatternStmt::Kind::Conditional:
+      std::cerr << "Not supported rotating Conditional\n";
+      exit(-1);
+      break;
+    }
   }
   return nullptr;
 }
 
-struct DeclIndex {
-  const parser_spec::TokenizerModuleIndex* token_index = nullptr;
-  tok::Token tokenizer;
-  tok::Token entry;
-  tok::Token mod_name;
-  std::map<string_view, Production*> productions;
-  std::map<string_view, TypeDecl*> type_decls;
-
-  const parser_spec::TokenizerIndex& getTokenizer() {
-    if (tokenizer.str.empty()) {
-      fprintf(stderr, "No tokenizer set.\n");
-      exit(-1);
-    }
-    auto it = token_index->tokenizers.find(tokenizer.str);
-    if (it == token_index->tokenizers.end()) {
-      std::cerr << "No such tokenizer " << tokenizer.str << "\n";
-      exit(-1);
-    }
-    return *it->second;
-  }
-  void Register(Production* prod) {
-    auto it = productions.find(prod->name.str);
-    if (it != productions.end()) {
-      std::cerr << "Duplicate name: " << it->second->name.str << "\n";
-      exit(-1);
-    } else {
-      productions[prod->name.str] = prod;
-    }
-  }
-
-  void EmitModule() {
-    EmitContext ctx(std::cout);
-    ctx.stream << "namespace " << mod_name.str << " {\n";
-    token_index->EmitTokenizer(tokenizer.str, ctx.stream);
-    ctx.stream << "}  // namespace " << mod_name.str << "\n";
-
-    for (auto& prod : productions) {
-      prod.second->CollectType(this);
-    }
-    // Emit all types...
-    {
-      auto* m = new Module;
-      m->mod_name = mod_name;
-      for (auto& type : type_decls) {
-        m->decls.push_back(type.second);
-      }
-      DumpASTTypes(ctx.stream).visit(m);
-    }
-    ctx.stream << "namespace " << mod_name.str << " {\n";
-    ctx.stream << "namespace parser {\n";
-    ctx.index = this;
-    // Emit productions here...
-    for (auto& prod : productions) {
-      prod.second->DoEmitFwd(ctx);
-    }
-    for (auto& prod : productions) {
-      prod.second->DoEmit(ctx);
-    }
-
-    ctx.stream << entry.str << "* DoParse(Tokenizer& tokens) { return _production_" << entry.str << "(tokens); }\n";
-    ctx.stream << "}  // namespace parser\n";
-    ctx.stream << "}  // namespace " << mod_name.str << "\n";
-  }
-  
-  void RegisterType(TypeDecl* t) {
-    auto it = type_decls.find(t->name.str);
-    if (it == type_decls.end()) {
-      type_decls[t->name.str] = t;
-    } else {
-      if (t->name.str == "TypeLetDecl") {
-        // Whitelist
-        return;
-      }
-      // CompareForEquality(it->second, t);
-      std::cerr << "Duplicate type decls: " << t->name.str << ".\n";
-      exit(-1);
-    }
-  }
-
-  TypeDeclExpr* TypeCheck(PatternExpr* _expr, string_view self_type_name) {
-    switch (_expr->getKind()) {
-    case PatternExpr::Kind::CommaConcat: {
-      auto* expr = reinterpret_cast<CommaConcatPatternExpr*>(_expr);
-      auto* res = new ParametricTypeDeclExpr;
-      res->base = BuiltinName("Array");
-      res->params.push_back(TypeCheck(expr->element, self_type_name));
-      return res;
-    } case PatternExpr::Kind::Concat: {
-      auto* expr = reinterpret_cast<ConcatPatternExpr*>(_expr);
-      auto* res = new ParametricTypeDeclExpr;
-      res->base = BuiltinName("Array");
-      res->params.push_back(TypeCheck(expr->element, self_type_name));
-      return res;
-    } case PatternExpr::Kind::Self: {
-      if (self_type_name.empty()) {
-        std::cerr << "Self not available in context.\n";
-        exit(-1);
-      }
-      return BuiltinName(self_type_name);
-    } case PatternExpr::Kind::Named: {
-      auto* expr = reinterpret_cast<NamedPatternExpr*>(_expr);
-      if (getTokenizer().isToken(expr->name.str)) {
-        return BuiltinName("Token");
-      } else {
-        auto it = productions.find(expr->name.str);
-        if (it == productions.end()) {
-          std::cerr << "Could not find: " << expr->name.str << "\n";
-          exit(-1);
-        }
-        return it->second->ReferenceTypeDeclExpr(this);
-      }
-    } case PatternExpr::Kind::New: {
-      auto* expr = reinterpret_cast<NewPatternExpr*>(_expr);
-      auto* res = new NamedTypeDeclExpr;
-      res->name = expr->type_name;
-      auto* new_type = new TypeDecl;
-      new_type->name = expr->type_name;
-      new_type->type = TypeCheck(expr->value, self_type_name);
-      RegisterType(new_type);
-      return res;
-    }
-    }
-  }
-
-  TypeDeclExpr* TypeCheck(PatternStmt* stmt, string_view self_type_name) {
-    switch (stmt->getKind()) {
-    case PatternStmt::Kind::Compound: {
-      auto* mstmt = reinterpret_cast<CompoundPatternStmt*>(stmt);
-      TypeDeclExpr* wrapped_t = nullptr;
-      auto* res = new ProductTypeDeclExpr;
-      for (auto* item : mstmt->items) {
-        switch (item->getKind()) {
-        case PatternStmt::Kind::Compound: {
-          fprintf(stderr, "Compound Type unhandled.\n");
-          exit(-1);
-          break;
-        } case PatternStmt::Kind::String: {
-          break;
-        } case PatternStmt::Kind::Assign: {
-          auto* stmt = reinterpret_cast<AssignPatternStmt*>(item);
-          auto* nt = new TypeLetDecl;
-          nt->name = stmt->name;
-          nt->type = TypeCheck(stmt->value, self_type_name);
-          res->decls.push_back(nt);
-          break;
-        } case PatternStmt::Kind::Wrap: {
-          if (wrapped_t) {
-            std::cerr << "There can only be 1 Wrapped type!\n";
-            exit(-1);
-          }
-          wrapped_t = TypeCheck(reinterpret_cast<WrapPatternStmt*>(item)->value, self_type_name);
-          break;
-        }
-        }
-      }
-      if (wrapped_t != nullptr && !res->decls.empty()) {
-        std::cerr << "There can only be wrapped type or assign building a struct.:" << self_type_name << "\n";
-        exit(-1);
-      }
-      if (wrapped_t) { return wrapped_t; }
-      return res;
-    } case PatternStmt::Kind::String: {
-      fprintf(stderr, "Raw String Type unhandled.\n");
-      exit(-1);
-    } case PatternStmt::Kind::Assign: {
-      fprintf(stderr, "Raw Assign Type unhandled.\n");
-      exit(-1);
-    } case PatternStmt::Kind::Wrap: {
-      fprintf(stderr, "Raw Wrap Type unhandled.\n");
-      exit(-1);
-    }
-    }
-  }
-
-  ProductTypeDeclExpr* PatternToStructType(PatternStmt* stmt, string_view self_type_name) {
-    auto* res = TypeCheck(stmt, self_type_name);
-    if (res->getKind() != TypeDeclExpr::Kind::Product) {
-      fprintf(stderr, "Really wanted product here..\n");
-      exit(-1);
-    }
-    return reinterpret_cast<ProductTypeDeclExpr*>(res);
-  }
-  
-  std::map<PatternExpr*, PatternStmt*> concat_successors; 
-  void IndexConcatSuccessors(PatternExpr* expr) {
-    switch (expr->getKind()) {
-    case PatternExpr::Kind::Concat:
-      IndexConcatSuccessors(reinterpret_cast<ConcatPatternExpr*>(expr)->element);
-      break;
-    case PatternExpr::Kind::CommaConcat:
-      IndexConcatSuccessors(reinterpret_cast<CommaConcatPatternExpr*>(expr)->element);
-      break;
-    case PatternExpr::Kind::New:
-      IndexConcatSuccessors(reinterpret_cast<NewPatternExpr*>(expr)->value);
-      break;
-    case PatternExpr::Kind::Self:
-    case PatternExpr::Kind::Named:
-      break;
-    }
-  }
-  void IndexConcatSuccessors(PatternStmt* stmt) {
-    switch (stmt->getKind()) {
-    case PatternStmt::Kind::Compound: {
-      auto& items = reinterpret_cast<CompoundPatternStmt*>(stmt)->items;
-      for (size_t i = 0; i < items.size(); ++i) {
-        auto* item = items[i];
-        auto* value = GetValue(item);
-        if (value && (value->getKind() == PatternExpr::Kind::Concat
-            || value->getKind() == PatternExpr::Kind::CommaConcat) &&
-            i < items.size() - 1) {
-          concat_successors[value] = items[i + 1];
-        }
-        IndexConcatSuccessors(item);
-      }
-      break;
-    }
-    case PatternStmt::Kind::Wrap:
-      IndexConcatSuccessors(reinterpret_cast<WrapPatternStmt*>(stmt)->value);
-      break;
-    case PatternStmt::Kind::Assign:
-      IndexConcatSuccessors(reinterpret_cast<AssignPatternStmt*>(stmt)->value);
-      break;
-    case PatternStmt::Kind::String:
-      break;
-    }
-  }
-  void IndexConcatSuccessors(Decl* decl) {
-    switch (decl->getKind()) {
-    case Decl::Kind::Expr:
-      for (auto* stmt : reinterpret_cast<ExprDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
-      break;
-    case Decl::Kind::ProductionAndType:
-      for (auto* stmt : reinterpret_cast<ProductionAndTypeDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
-      break;
-    case Decl::Kind::Production:
-      for (auto* stmt : reinterpret_cast<ProductionDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
-      break;
-    case Decl::Kind::Pattern:
-      IndexConcatSuccessors(reinterpret_cast<PatternDecl*>(decl)->value);
-      break;
-    case Decl::Kind::Define:
-      IndexConcatSuccessors(reinterpret_cast<DefineDecl*>(decl)->value);
-      break;
-    case Decl::Kind::LeftAssoc:
-      for (auto* stmt : reinterpret_cast<LeftAssocDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
-      break;
-    case Decl::Kind::RightAssoc:
-      for (auto* stmt : reinterpret_cast<RightAssocDecl*>(decl)->stmts) IndexConcatSuccessors(stmt);
-      break;
-    default:
-      break;
-    }
-  }
-};
-
-TypeDeclExpr* Production::ReferenceTypeDeclExpr(DeclIndex* decl_index) const {
-  auto* res = new NamedTypeDeclExpr;
-  res->name = name;
-  res->name.type = tok::identifier;
-  return res;
+PatternStmt* RotateFrontTry(PatternStmt* stmt) {
+  if (stmt->getKind() != PatternStmt::Kind::Conditional) return nullptr;
+  auto* cstmt = reinterpret_cast<ConditionalPatternStmt*>(stmt);
+  assert(cstmt->value->getKind() == PatternStmt::Kind::Compound);
+  return RotateFront(reinterpret_cast<CompoundPatternStmt*>(cstmt->value));
 }
 
-struct PatternEmitContext : public EmitContext {
-  explicit PatternEmitContext(const EmitContext& o) : EmitContext(o) {}
-
-  string_view self_type;
-  PatternEmitContext Clone() {
-    auto result = *this;
-    result.tmpi = 0;
-    result.emit_tmpi = 0;
-    return result;
-  }
-  bool EmitPeakCheck(PatternStmt* stmt) {
-    if (stmt->getKind() == PatternStmt::Kind::String) {
-      stream << "  if (tokens.peak_check_str(" <<
-          reinterpret_cast<StringPatternStmt*>(stmt)->value.str << ")) {\n";
-      return true;
-    } else {
-      auto* _expr = GetValue(stmt);
-      if (_expr && _expr->getKind() == PatternExpr::Kind::Named) {
-        auto* expr = reinterpret_cast<NamedPatternExpr*>(_expr);
-        if (index->getTokenizer().isToken(expr->name.str)) {
-          stream << "  if (tokens.peak_check(tok::" << expr->name.str << ")) {\n";
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  void EmitValue(PatternExpr* _expr) {
-    switch (_expr->getKind()) {
-    case PatternExpr::Kind::CommaConcat: {
-      auto* expr = reinterpret_cast<CommaConcatPatternExpr*>(_expr);
-      auto* type = index->TypeCheck(expr->element, "");
-      stream << "  ([&] {\n   std::vector<";
-      DumpASTTypes(stream).visitTypeExpr(type);
-      stream << "> __current_vector__;\n";
-      auto it = index->concat_successors.find(_expr);
-      if (it != index->concat_successors.end()) {
-        auto* stmt = it->second;
-        if (stmt->getKind() == PatternStmt::Kind::String) {
-          stream << "    if (!tokens.peak_check_str(" <<
-              reinterpret_cast<StringPatternStmt*>(stmt)->value.str << "))";
-        } else {
-          std::cerr << "Unhandled stmt...\n";
-          exit(-1);
-        }
-      } else {
-        stream << "    if (!tokens.peak_check(tok::eof))";
-      }
-      stream << "{\n";
-      stream << "    while (true) {\n";
-      stream << " __current_vector__.push_back([&] {";
-      {
-        PatternEmitContext ext_ctx = Clone();
-        auto* stmt = reinterpret_cast<CompoundPatternStmt*>(expr->element);
-        for (auto* stmt : stmt->items) {
-          ext_ctx.EmitToTmp(stmt);
-        }
-        for (auto* stmt : stmt->items) {
-          ext_ctx.CopyFromTmp(stmt);
-        }
-      }
-      stream << " }());";
-      stream << " if (tokens.peak_check(tok::" << expr->comma.str << ")) {\n";
-      stream << "   tokens.expect(tok::" << expr->comma.str << ");\n";
-      stream << " } else { break; }\n";
-      stream << "  }}return __current_vector__;}())\n";
-      break;
-    } case PatternExpr::Kind::Concat: {
-      auto* expr = reinterpret_cast<ConcatPatternExpr*>(_expr);
-      auto* type = index->TypeCheck(expr->element, self_type);
-      stream << "  ([&] {\n   std::vector<";
-      DumpASTTypes(stream).visitTypeExpr(type);
-      stream << "> __current_vector__;\n";
-      stream << "    while (true) {\n";
-      auto it = index->concat_successors.find(_expr);
-      if (it != index->concat_successors.end()) {
-        auto* stmt = it->second;
-        if (stmt->getKind() == PatternStmt::Kind::String) {
-          stream << "    if (tokens.peak_check_str(" <<
-              reinterpret_cast<StringPatternStmt*>(stmt)->value.str << "))";
-        } else {
-          std::cerr << "Unhandled stmt...\n";
-          exit(-1);
-        }
-      } else {
-        stream << "    if (tokens.peak_check(tok::eof))";
-      }
-      stream << "    { return __current_vector__; }";
-      stream << " __current_vector__.push_back([&] {";
-      {
-        PatternEmitContext ext_ctx = Clone();
-        auto* stmt = reinterpret_cast<CompoundPatternStmt*>(expr->element);
-        for (auto* stmt : stmt->items) {
-          ext_ctx.EmitToTmp(stmt);
-        }
-        for (auto* stmt : stmt->items) {
-          ext_ctx.CopyFromTmp(stmt);
-        }
-      }
-      stream << " }());";
-      stream << "  }}())\n";
-      break;
-    } case PatternExpr::Kind::Named: {
-      auto* expr = reinterpret_cast<NamedPatternExpr*>(_expr);
-      if (index->getTokenizer().isToken(expr->name.str)) {
-        stream << "tokens.expect(tok::" << expr->name.str << ")";
-      } else {
-        stream << "_production_" << expr->name.str << "(tokens)";
-      }
-      break;
-    } case PatternExpr::Kind::Self:
-      if (self_type.empty()) {
-        stream << "unhandled(\"self\")";
-      } else {
-        stream << "_production_" << self_type << "(tokens)";
-      }
-      break;
-    case PatternExpr::Kind::New: {
-      auto* expr = reinterpret_cast<NewPatternExpr*>(_expr);
-      stream << "([&] {\n";
-      stream << "    auto* result = new " << expr->type_name.str << ";\n";
-      {
-        PatternEmitContext ext_ctx = Clone();
-        auto* stmt = reinterpret_cast<CompoundPatternStmt*>(expr->value);
-        for (auto* stmt : stmt->items) {
-          ext_ctx.EmitToTmp(stmt);
-        }
-        for (auto* stmt : stmt->items) {
-          ext_ctx.CopyFromTmp(stmt);
-        }
-      }
-      stream << "    return result;\n";
-      stream << "  }())";
-      break;
-    }
-    }
-  }
-  void EmitToTmp(PatternStmt* astmt) {
-    switch (astmt->getKind()) {
-    case PatternStmt::Kind::String: {
-      stream << "  tokens.expect(" << 
-          reinterpret_cast<StringPatternStmt*>(astmt)->value.str << ");\n";
-      return;
-    } case PatternStmt::Kind::Assign: {
-    } case PatternStmt::Kind::Wrap: {
-      auto* value = GetValue(astmt);
-      stream << "  auto tmp" << tmpi << " = ";
-      EmitValue(value);
-      stream << ";\n";
-      ++tmpi;
-      break;
-    } case PatternStmt::Kind::Compound: {
-      assert(false && "unreachable");
-      break;
-    }
-    }
-  }
-  int tmpi = 0;
-  int emit_tmpi = 0;
-  void CopyFromTmp(PatternStmt* astmt) {
-    if (astmt->getKind() == PatternStmt::Kind::Wrap) {
-      stream << "  return tmp0;\n";
-    }
-    if (astmt->getKind() == PatternStmt::Kind::Assign) {
-      auto* stmt = reinterpret_cast<AssignPatternStmt*>(astmt);
-      stream << "  result->" << stmt->name.str << " = tmp" << emit_tmpi << ";\n";
-      ++emit_tmpi;
-    }
-  }
-};
-
-struct ExprProduction : public Production {
-  ExprDecl* decl;
-  ExprProduction(ExprDecl* decl) : decl(decl) {}
-  struct GroupdByType {
-    std::vector<PatternDecl*> binary;
-    std::vector<PatternDecl*> prefix;
-    std::vector<PatternDecl*> postfix;
-    std::vector<PatternDecl*> literal;
-  };
-  struct Group {
-    enum Associtivity {
-      LeftToRight, // Evaluation order of tree 
-      RightToLeft,
-      Unknown, // Binaries will not be able to self-refer.
-    };
-    enum OperatorType {
-      Binary,
-      Prefix,
-      Postfix,
-      Literal
-    };
-    static const char* OperatorName(OperatorType t) {
-      switch (t) {
-      case Binary: return "Binary";
-      case Prefix: return "Prefix";
-      case Postfix: return "Postfix";
-      case Literal: return "Literal";
-      }
-    }
-    Associtivity assoc = Unknown;
-    std::vector<PatternDecl*> patterns;
-
-    static bool IsSelf(PatternStmt* stmt) {
-      auto* expr = GetValue(stmt);
-      if (!expr) return false;
-      return expr->getKind() == PatternExpr::Kind::Self;
-    }
-
-    void Populate(const std::vector<Decl*>& decls) {
-      for (auto* decl : decls) {
-        switch (decl->getKind()) {
-        case Decl::Kind::Pattern:
-          patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
-          break;
-        default:
-          std::cerr << "Unknown Decl not handled in expr scope\n";
-          exit(-1);
-        }
-      }
-    }
-    
-    static OperatorType AnalyizeType(PatternDecl* decl) {
-      auto* stmt = reinterpret_cast<CompoundPatternStmt*>(decl->value);
-      assert(stmt->items.size() > 0);
-      bool st_self = IsSelf(stmt->items[0]);
-      bool ed_self = IsSelf(stmt->items[stmt->items.size() - 1]);
-      for (size_t i = 1; i < stmt->items.size(); ++i) {
-        if (IsSelf(stmt->items[i]) && IsSelf(stmt->items[i - 1])) {
-          std::cerr << "No two selfs in a row\n";
-          exit(-1);
-        }
-      }
-      if (st_self && ed_self) {
-        assert(stmt->items.size() > 1);
-        return Binary;
-      }
-      if (st_self && !ed_self) return Postfix;
-      if (!st_self && ed_self) return Prefix;
-      return Literal;
-    }
-
-    GroupdByType DoGrouping() const {
-      GroupdByType res;
-      for (auto* pattern : patterns) {
-        switch(AnalyizeType(pattern)) {
-        case Binary:
-          res.binary.push_back(pattern);
-          break;
-        case Prefix:
-          res.prefix.push_back(pattern);
-          break;
-        case Postfix:
-          res.postfix.push_back(pattern);
-          break;
-        case Literal:
-          res.literal.push_back(pattern);
-          break;
-        }
-      }
-      return res;
-    }
-  };
-  std::vector<Group> groups;
-
-  void EmitSelfSetRef(EmitContext& ctx, PatternStmt* stmt) const {
-    assert(stmt->getKind() == PatternStmt::Kind::Assign);
-    ctx.stream << "result->" << reinterpret_cast<AssignPatternStmt*>(stmt)->name.str;
-  }
-  void DoEmit(EmitContext& ctx) const override {
-    auto* type = ReferenceTypeDeclExpr(ctx.index);
-    // Do Expr analysis...
-
-    for (size_t i = 0; i < groups.size(); ++i) {
-      DumpASTTypes(ctx.stream).visitTypeExpr(type);
-      ctx.stream << " _production_" << name.str << "_group_" << i << "(Tokenizer& tokens) {  \n";
-      DumpASTTypes(ctx.stream).visitTypeExpr(type);
-      ctx.stream << " expr = nullptr;";
-      auto grouped = groups[i].DoGrouping();
-      if (!grouped.binary.empty()) {
-        assert(i > 0 && "Binary ops nonsensical on first level");
-        assert(grouped.binary.size() == groups[i].patterns.size() && "Must be all binary or nothing");
-        ctx.stream << "     expr = _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
-        if (groups[i].assoc == Group::RightToLeft) {
-          for (auto& binary : grouped.binary) {
-            PatternEmitContext ext_ctx(ctx);
-            ext_ctx.self_type = name.str;
-            auto* stmt = reinterpret_cast<CompoundPatternStmt*>(binary->value);
-            assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
-            std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end() - 1);
-            for (auto* stmt : nitems) {
-              ext_ctx.EmitToTmp(stmt);
-            }
-            ctx.stream << "  auto* result = new " << binary->name.str << name.str << ";\n";
-            for (auto* stmt : nitems) {
-              ext_ctx.CopyFromTmp(stmt);
-            }
-            EmitSelfSetRef(ctx, stmt->items[0]);
-            ctx.stream << " = expr;\n";
-            EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
-            ctx.stream << " = ";
-            ctx.stream << " _production_" << name.str << "_group_" << (i) << "(tokens);\n";
-            ctx.stream << " return result;\n";
-            ctx.stream << " }\n";
-          }
-        } else {
-          assert(groups[i].assoc == Group::LeftToRight && "Binary ops must have associativity");
-          ctx.stream << "while (true) {\n";
-          for (auto& binary : grouped.binary) {
-            PatternEmitContext ext_ctx(ctx);
-            ext_ctx.self_type = name.str;
-            auto* stmt = reinterpret_cast<CompoundPatternStmt*>(binary->value);
-            assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
-            std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end() - 1);
-            for (auto* stmt : nitems) {
-              ext_ctx.EmitToTmp(stmt);
-            }
-            ctx.stream << "  auto* result = new " << binary->name.str << name.str << ";\n";
-            for (auto* stmt : nitems) {
-              ext_ctx.CopyFromTmp(stmt);
-            }
-            EmitSelfSetRef(ctx, stmt->items[0]);
-            ctx.stream << " = expr;\n";
-            EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
-            ctx.stream << " = ";
-            ctx.stream << " _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
-            ctx.stream << " expr = result;";
-            ctx.stream << " continue;";
-            ctx.stream << " }\n";
-            ctx.stream << " break;\n";
-          }
-          ctx.stream << " }\n";
-        }
-        ctx.stream << "  return expr;\n}\n";
-      } else {
-        assert(grouped.binary.size() == 0 && "Binary ops not handled\n");
-        for (auto& prefix : grouped.prefix) {
-          PatternEmitContext ext_ctx(ctx);
-          ext_ctx.self_type = name.str;
-          auto* stmt = reinterpret_cast<CompoundPatternStmt*>(prefix->value);
-          assert(ext_ctx.EmitPeakCheck(stmt->items[0]) && "Exhaustive exprs not allowed");
-          std::vector<PatternStmt*> nitems(stmt->items.begin(), stmt->items.end() - 1);
-          for (auto* stmt : nitems) {
-            ext_ctx.EmitToTmp(stmt);
-          }
-          ctx.stream << "  auto* result = new " << prefix->name.str << name.str << ";\n";
-          for (auto* stmt : nitems) {
-            ext_ctx.CopyFromTmp(stmt);
-          }
-          EmitSelfSetRef(ctx, stmt->items[stmt->items.size() - 1]);
-          ctx.stream << " = ";
-          ctx.stream << " _production_" << name.str << "_group_" << (i) << "(tokens);\n";
-          ctx.stream << " return result;\n";
-          ctx.stream << " }\n";
-        }
-
-        bool first_literal = true;
-        for (auto& literal : grouped.literal) {
-          PatternEmitContext ext_ctx(ctx);
-          ext_ctx.self_type = name.str;
-          auto* stmt = reinterpret_cast<CompoundPatternStmt*>(literal->value);
-          if (!first_literal) ext_ctx.stream << " else ";
-          assert(ext_ctx.EmitPeakCheck(stmt->items[0]) && "Exhaustive exprs not allowed");
-          for (auto* stmt : stmt->items) {
-            ext_ctx.EmitToTmp(stmt);
-          }
-          ctx.stream << "  auto* result = new " << literal->name.str << name.str << ";\n";
-          for (auto* stmt : stmt->items) {
-            ext_ctx.CopyFromTmp(stmt);
-          }
-          ctx.stream << "  expr = result;\n";
-          ctx.stream << " }\n";
-          first_literal = false;
-        }
-
-        if (!first_literal) ctx.stream << " else ";
-        if (i == 0) {
-          ctx.stream << "{ tokens.unexpected(); }\n";
-        } else {
-          ctx.stream << "  {\n";
-          ctx.stream << "     expr = _production_" << name.str << "_group_" << (i - 1) << "(tokens);\n";
-          ctx.stream << "  }\n";
-        }
-
-        ctx.stream << "  while (true) {\n";
-        for (auto& postfix : grouped.postfix) {
-          PatternEmitContext ext_ctx(ctx);
-          ext_ctx.self_type = name.str;
-          auto* stmt = reinterpret_cast<CompoundPatternStmt*>(postfix->value);
-          assert(ext_ctx.EmitPeakCheck(stmt->items[1]) && "Exhaustive exprs not allowed");
-          std::vector<PatternStmt*> nitems(stmt->items.begin() + 1, stmt->items.end());
-          for (auto* stmt : nitems) {
-            ext_ctx.EmitToTmp(stmt);
-          }
-          ctx.stream << "  auto* result = new " << postfix->name.str << name.str << ";\n";
-          for (auto* stmt : nitems) {
-            ext_ctx.CopyFromTmp(stmt);
-          }
-          EmitSelfSetRef(ctx, stmt->items[0]);
-          ctx.stream << " = expr;\n";
-          ctx.stream << "  expr = result;\n";
-          ctx.stream << " continue;\n";
-          ctx.stream << " }\n";
-        }
-        ctx.stream << "  return expr;\n}\n";
-        ctx.stream << "  }\n";
-      }
-    }
-    DumpASTTypes(ctx.stream).visitTypeExpr(type);
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens) {\n";
-    ctx.stream << "  return _production_" << name.str << "_group_" << (groups.size() - 1) << "(tokens);\n";
-    ctx.stream << "}\n";
-  }
-  void DoEmitFwd(EmitContext& ctx) const override {
-    auto* type = ReferenceTypeDeclExpr(ctx.index);
-    // Do Expr analysis...
-    for (size_t i = 0; i < groups.size(); ++i) {
-      DumpASTTypes(ctx.stream).visitTypeExpr(type);
-      ctx.stream << " _production_" << name.str << "_group_" << i << "(Tokenizer& tokens);\n";
-    }
-    DumpASTTypes(ctx.stream).visitTypeExpr(type);
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens);\n";
-  }
-  void CollectType(DeclIndex* decl_index) const override {
-    auto* type_decls = &decl_index->type_decls;
-    // Need a function which gives the TypeDeclExpr for a PatternStmt.
-    auto it = type_decls->find(name.str);
-    SumTypeDeclExpr* type = nullptr;
-    if (it == type_decls->end()) {
-      auto* type_decl = (*type_decls)[name.str] = new TypeDecl;
-      type_decl->name = name;
-      type_decl->type = type = new SumTypeDeclExpr;
-    } else {
-      std::cerr << "Type name " << name.str << " already defined.\n";
-      exit(-1);
-    }
-    for (auto& group : groups) {
-      for (auto* pattern : group.patterns) {
-        auto* nv = new TypeLetDecl;
-        type->decls.push_back(nv);
-        nv->name = pattern->name;
-        nv->type = decl_index->PatternToStructType(pattern->value, name.str);
-      }
-    }
-  }
-};
-
-bool IsSame(PatternExpr* aexpr, PatternExpr* bexpr) {
-  if (aexpr->getKind() != bexpr->getKind()) return false;
-  switch (aexpr->getKind()) {
-  case PatternExpr::Kind::Self:
-    return true;
-  case PatternExpr::Kind::Named: {
-    return reinterpret_cast<NamedPatternExpr*>(aexpr)->name.str == 
-    reinterpret_cast<NamedPatternExpr*>(bexpr)->name.str;
-  } default:
-    return false;
-  }
+CompoundPatternStmt* RotateCompound(CompoundPatternStmt* stmt) {
+  auto* child = RotateFront(stmt);
+  assert(child && "Could not properly rotate Compound...");
+  stmt->items.insert(stmt->items.begin(), child);
+  return stmt;
 }
 
-bool IsSame(PatternStmt* astmt, PatternStmt* bstmt) {
-  switch (astmt->getKind()) {
-  case PatternStmt::Kind::String: {
-    if (bstmt->getKind() != PatternStmt::Kind::String) return false;
-    return reinterpret_cast<StringPatternStmt*>(astmt)->value.str ==
-        reinterpret_cast<StringPatternStmt*>(bstmt)->value.str;
-  } case PatternStmt::Kind::Assign:
-  case PatternStmt::Kind::Wrap: {
-    auto* avalue = GetValue(astmt);
-    auto* bvalue = GetValue(bstmt);
-    if (!avalue || !bvalue) return false;
-    return IsSame(avalue, bvalue);
-  } case PatternStmt::Kind::Compound: {
-    assert(false && "unreachable");
-    break;
-  } 
+CompoundPatternStmt* getTryChild(PatternStmt* cstmt) {
+  assert(cstmt->getKind() == PatternStmt::Kind::Conditional);
+  auto* cstmt2 = reinterpret_cast<ConditionalPatternStmt*>(cstmt);
+  assert(cstmt2->value->getKind() == PatternStmt::Kind::Compound);
+  return *reinterpret_cast<CompoundPatternStmt**>(&cstmt2->value);
+}
+
+// group(n) -> std::vector<PatternStmt*, std::vector<PatternStmt*>>;
+//
+// cases:
+//  - only one group with more than one element:
+//   -> Keep unwrapping.
+//  - many groups
+//   -> for each prefix:
+//   -> try { [prefix] + trys }
+//      -> recurse on each body...
+//
+//   nullptr group allowed but MUST be singular.
+//   non-conditional becomes nullptr group...
+//
+// Could simply introduce more nested "try" blocks...
+
+bool isEqualTry(PatternExpr* a, PatternExpr* b) {
+  if (a->getKind() != b->getKind()) return false;
+  if (a->getKind() == PatternExpr::Kind::Named) {
+    return reinterpret_cast<NamedPatternExpr*>(a)->name.str ==
+        reinterpret_cast<NamedPatternExpr*>(b)->name.str;
+  }
+  if (a->getKind() == PatternExpr::Kind::Self) return true;
+  return false;
+}
+
+bool isEqualTry(PatternStmt* a, PatternStmt* b) {
+  if (a->getKind() != b->getKind()) return false;
+  if (a->getKind() == PatternStmt::Kind::String) {
+    return reinterpret_cast<StringPatternStmt*>(a)->value.str
+        == reinterpret_cast<StringPatternStmt*>(b)->value.str;
+  } else if (a->getKind() == PatternStmt::Kind::Push) {
+    return isEqualTry(
+        reinterpret_cast<PushPatternStmt*>(a)->value,
+        reinterpret_cast<PushPatternStmt*>(b)->value);
   }
   return false;
 }
 
-std::vector<PatternStmt*> FindCommon(const std::vector<PatternStmt*>& a,
-                                     const std::vector<PatternStmt*>& b,
-                                     size_t st_a = 0, size_t st_b = 0) {
-  std::vector<PatternStmt*> out;
-  auto n = std::min(a.size() - st_a, b.size() - st_b);
-  for (size_t i = 0; i < n; ++i) {
-    auto* astmt = a[i + st_a];
-    if (!IsSame(astmt, b[i + st_b])) {
-      break;
+struct PatternGroup {
+  PatternStmt* common = nullptr;
+  std::vector<PatternStmt*> items;
+};
+
+struct Grouping {
+  PatternStmt* unrotated = nullptr;
+  std::vector<PatternGroup> groups;
+};
+
+void InsertIntoGroups(PatternStmt* key, PatternStmt* item,
+                      Grouping& out) {
+  if (!key) {
+    assert(!out.unrotated && "duplicate nullptr groups...");
+    out.unrotated = item;
+    return;
+  }
+  for (auto& group : out.groups) {
+    if (isEqualTry(group.common, key)) {
+      group.items.push_back(item);
+      return;
     }
-    out.push_back(astmt);
+  }
+  out.groups.emplace_back();
+  out.groups.back().common = key;
+  out.groups.back().items.push_back(item);
+}
+Grouping doGrouping(ModuleContext* globals, const std::vector<PatternStmt*>& items) {
+  Grouping out;
+  for (auto* item : items) {
+    InsertIntoGroups(RotateFront(getTryChild(item)), item, out);
   }
   return out;
 }
 
-struct UnionAnalysis {
-  // Can only get smaller.
-  std::vector<PatternStmt*> common;
-  std::vector<UnionAnalysis> children;
-  PatternDecl* emit = nullptr;
+bool isProduction(ModuleContext* globals, PatternStmt* stmt) {
+  if (stmt->getKind() != PatternStmt::Kind::Push) return false;
+  auto* value = reinterpret_cast<PushPatternStmt*>(stmt)->value;
+  if (value->getKind() != PatternExpr::Kind::Named) return false;
+  return !globals->isToken(reinterpret_cast<NamedPatternExpr*>(value)->name.str);
+}
 
-  void add(PatternDecl* decl, size_t offset = 0) {
-    assert(decl->value->getKind() == PatternStmt::Kind::Compound);
-    auto* stmt = reinterpret_cast<CompoundPatternStmt*>(decl->value);
-    if (children.size() == 0 && emit == nullptr) {
-      common = std::vector<PatternStmt*>(stmt->items.begin() + offset,
-                                         stmt->items.end());
-      emit = decl;
-    } else {
-      std::vector<PatternStmt*> ncommon = FindCommon(stmt->items, common, offset);
-      if (ncommon.size() == common.size()) {
-        if (stmt->items.size() == ncommon.size() + offset) {
-          if (emit) {
-            std::cerr << "Duplicate problem!\n";
-            exit(-1);
-          } else {
-            emit = decl;
-          }
-        } else {
-          for (auto& child: children) {
-            if (!FindCommon(stmt->items, child.common, offset + ncommon.size()).empty()) {
-              child.add(decl, ncommon.size() + offset);
-              return;
-            }
-          }
-          // TODO: Find a proper home...
-          UnionAnalysis new_home;
-          new_home.add(decl, ncommon.size() + offset);
-          children.push_back(new_home);
-        }
+void Distinguish(ModuleContext* globals, std::vector<PatternStmt*> prefix,
+                 std::vector<PatternStmt*>& items) {
+  if (items.empty()) return;
+  while (true) {
+    auto groupings = doGrouping(globals, items);
+    if (groupings.groups.size() == 1 && !groupings.unrotated) {
+      auto& group = groupings.groups.front();
+      if (group.items.size() == 1) {
+        auto* stmt = getTryChild(group.items.front());
+        stmt->items.insert(stmt->items.begin(), group.common);
+        items = {group.items.front()};
+        break;
       } else {
-        std::vector<PatternStmt*> tail(common.begin() + ncommon.size(), common.end());
-        auto s_copy = std::move(*this);
-        *this = UnionAnalysis();
-        s_copy.common = tail;
-        common = ncommon;
-        children.push_back(std::move(s_copy));
-        if (stmt->items.size() == ncommon.size() + offset) {
-          if (emit) {
-            std::cerr << "Duplicate problem!\n";
-            exit(-1);
+        prefix.push_back(groupings.groups.front().common);
+        items = std::move(groupings.groups.front().items);
+      }
+    } else {
+      items.clear();
+      for (auto& group : groupings.groups) {
+        if (group.items.size() == 1) {
+          if (isProduction(globals, group.common)) {
+            auto* stmt = getTryChild(group.items.front());
+            stmt->items.insert(stmt->items.begin(), group.common);
+            assert(!groupings.unrotated && "Duplicate unconsumable");
+            groupings.unrotated = group.items.front();
           } else {
-            emit = decl;
+            auto* stmt = getTryChild(group.items.front());
+            stmt->items.insert(stmt->items.begin(), group.common);
+            items.push_back(group.items.front());
           }
         } else {
-          UnionAnalysis new_home;
-          new_home.add(decl, ncommon.size() + offset);
-          children.push_back(new_home);
+          Distinguish(globals, {group.common}, group.items);
+          auto* tmp1 = new ConditionalPatternStmt;
+          auto* tmp2 = new CompoundPatternStmt;
+          tmp1->value = tmp2;
+          tmp2->items = std::move(group.items);
+          items.push_back(tmp1);
         }
       }
+      if (groupings.unrotated) {
+        items.push_back(getTryChild(groupings.unrotated));
+      }
+      break;
     }
   }
-  void EmitCommon(PatternEmitContext& ctx, tok::Token type_name) {
-    for (auto* stmt : common) {
-      ctx.EmitToTmp(stmt);
-    }
-    bool exhausted = false;
-    for (auto& child : children) {
-      PatternEmitContext ctx_copy = ctx;
-      assert(!child.common.empty());
-      assert(!exhausted);
-      auto* stmt = child.common[0];
-      if (!ctx_copy.EmitPeakCheck(stmt)) {
-        exhausted = true;
-      }
-      child.EmitCommon(ctx_copy, type_name);
-      if (!exhausted) ctx.stream << "  }\n";
-    }
-    if (exhausted) {
-      assert(emit == nullptr);
-      return;
-    }
-    if (emit) {
-      ctx.stream << "  auto* result = new " 
-          << emit->name.str
-          << type_name.str
-          << ";\n";
-      assert(emit->value->getKind() == PatternStmt::Kind::Compound);
-      auto* stmt = reinterpret_cast<CompoundPatternStmt*>(emit->value);
-      for (auto* stmt : stmt->items) {
-        ctx.CopyFromTmp(stmt);
-      }
-      ctx.stream << "  return result;\n";
+  items.insert(items.begin(), prefix.begin(), prefix.end());
+}
+
+CompoundPatternStmt* RotateAndVerifyTrys(ModuleContext* globals, CompoundPatternStmt* stmt) {
+  Distinguish(globals, {}, stmt->items);
+  return stmt;
+}
+
+struct FieldTypeCheckContext {
+  ModuleContext* globals;
+  struct Field {
+    string_view name;
+    TypeDeclExpr* type;
+  };
+  std::vector<Field> fields;
+  void setField(string_view name, TypeDeclExpr* type) {
+    fields.push_back(Field{name, type});
+  }
+
+  void DoVerify(TypeDeclExpr* struct_typeref) {
+    ProductTypeDeclExpr* struct_type = nullptr;
+    if (auto* existing = globals->MakeStructType(struct_typeref, &struct_type)) {
+      assert(existing);
+      // TODO:
+      // - check struct type is complete.
     } else {
-      ctx.stream << "  tokens.unexpected();\n";
+      // Make new struct type.
+      for (auto& field : fields) {
+        auto* fdecl = new TypeLetDecl;
+        fdecl->name.str = field.name;
+        fdecl->type = field.type;
+        struct_type->decls.push_back(fdecl);
+      }
     }
-  }
-  void DoEmit(EmitContext& ctx, tok::Token type_name) {
-    PatternEmitContext ext_ctx(ctx);
-    EmitCommon(ext_ctx, type_name);
   }
 };
 
-struct UnionProduction : public Production {
-  tok::Token type_name;
-  Decl* decl;
-  std::vector<PatternDecl*> patterns;
-  void DoEmit(EmitContext& ctx) const override {
-    UnionAnalysis analysis{};
-    for (auto* pattern : patterns) {
-      analysis.add(pattern);
+tok::Token WrapToken(tok::Token base, size_t id) {
+  auto* tmp = 
+      new std::string(std::string(base.str) + "_group_" + std::to_string(id));
+  tok::Token res;
+  res.str = string_view(*tmp);
+  return res;
+}
+
+struct ExprGroupedByType {
+  std::vector<PatternDecl*> binary;
+  std::vector<PatternDecl*> prefix;
+  std::vector<PatternDecl*> postfix;
+  std::vector<PatternDecl*> literal;
+};
+struct ExprGroup {
+  enum Associtivity {
+    LeftToRight, // Evaluation order of tree 
+    RightToLeft,
+    Unknown, // Binaries will not be able to self-refer.
+  };
+  enum OperatorType {
+    Binary,
+    Prefix,
+    Postfix,
+    Literal
+  };
+  static const char* OperatorName(OperatorType t) {
+    switch (t) {
+    case Binary: return "Binary";
+    case Prefix: return "Prefix";
+    case Postfix: return "Postfix";
+    case Literal: return "Literal";
     }
-    DumpASTTypes(ctx.stream).visitTypeExpr(ReferenceTypeDeclExpr(ctx.index));
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens) {\n";
-    analysis.DoEmit(ctx, type_name);
-    ctx.stream << "}\n\n";
   }
-  void DoEmitFwd(EmitContext& ctx) const override {
-    DumpASTTypes(ctx.stream).visitTypeExpr(ReferenceTypeDeclExpr(ctx.index));
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens);\n";
+  Associtivity assoc = Unknown;
+  std::vector<PatternDecl*> patterns;
+
+  static bool IsSelf(PatternStmt* stmt) {
+    auto* expr = getValue(stmt);
+    if (!expr) return false;
+    return expr->getKind() == PatternExpr::Kind::Self;
   }
-  void CollectType(DeclIndex* decl_index) const override {
-    auto* type_decls = &decl_index->type_decls;
-    // Need a function which gives the TypeDeclExpr for a PatternStmt.
-    auto it = type_decls->find(type_name.str);
-    SumTypeDeclExpr* type = nullptr;
-    if (it == type_decls->end()) {
-      auto* type_decl = (*type_decls)[type_name.str] = new TypeDecl;
-      type_decl->name = type_name;
-      type_decl->type = type = new SumTypeDeclExpr;
-    } else {
-      if (it->second->type->getKind() == TypeDeclExpr::Kind::Sum) {
-        type = reinterpret_cast<SumTypeDeclExpr*>(it->second->type);
+
+  void Populate(const std::vector<Decl*>& decls) {
+    for (auto* decl : decls) {
+      switch (decl->getKind()) {
+      case Decl::Kind::Pattern:
+        patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
+        break;
+      default:
+        std::cerr << "Unknown Decl not handled in expr scope\n";
+        exit(-1);
       }
     }
-    if (type == nullptr) {
-      std::cerr << "Type name " << type_name.str << " already defined.\n";
-      exit(-1);
-    }
-    for (auto* pattern : patterns) {
-      auto* nv = new TypeLetDecl;
-      type->decls.push_back(nv);
-      nv->name = pattern->name;
-      nv->type = decl_index->PatternToStructType(pattern->value, type_name.str);
-    }
   }
-  TypeDeclExpr* ReferenceTypeDeclExpr(DeclIndex* decl_index) const override {
-    auto* res = new NamedTypeDeclExpr;
-    res->name = type_name;
-    res->name.type = tok::identifier;
+
+  static OperatorType AnalyizeType(PatternDecl* decl) {
+    auto* stmt = reinterpret_cast<CompoundPatternStmt*>(decl->value);
+    assert(stmt->items.size() > 0);
+    bool st_self = IsSelf(stmt->items[0]);
+    bool ed_self = IsSelf(stmt->items[stmt->items.size() - 1]);
+    for (size_t i = 1; i < stmt->items.size(); ++i) {
+      if (IsSelf(stmt->items[i]) && IsSelf(stmt->items[i - 1])) {
+        std::cerr << "No two selfs in a row\n";
+        exit(-1);
+      }
+    }
+    if (st_self && ed_self) {
+      assert(stmt->items.size() > 1);
+      return Binary;
+    }
+    if (st_self && !ed_self) return Postfix;
+    if (!st_self && ed_self) return Prefix;
+    return Literal;
+  }
+
+  ExprGroupedByType DoGrouping() const {
+    ExprGroupedByType res;
+    for (auto* pattern : patterns) {
+      switch(AnalyizeType(pattern)) {
+      case Binary:
+        res.binary.push_back(pattern);
+        break;
+      case Prefix:
+        res.prefix.push_back(pattern);
+        break;
+      case Postfix:
+        res.postfix.push_back(pattern);
+        break;
+      case Literal:
+        res.literal.push_back(pattern);
+        break;
+      }
+    }
     return res;
   }
 };
 
-struct LooseProduction : public Production {
-  PatternDecl* decl;
-  void DoEmit(EmitContext& ctx) const override {
-    DumpASTTypes(ctx.stream).visitTypeExpr(ReferenceTypeDeclExpr(ctx.index));
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens) {\n";
-    assert(decl->value->getKind() == PatternStmt::Kind::Compound);
-    PatternEmitContext ext_ctx(ctx);
-    auto* stmt = reinterpret_cast<CompoundPatternStmt*>(decl->value);
-    for (auto* stmt : stmt->items) {
-      ext_ctx.EmitToTmp(stmt);
-    }
-    for (auto* stmt : stmt->items) {
-      ext_ctx.CopyFromTmp(stmt);
-    }
-    ctx.stream << "}\n";
-  }
-  void DoEmitFwd(EmitContext& ctx) const override {
-    DumpASTTypes(ctx.stream).visitTypeExpr(ReferenceTypeDeclExpr(ctx.index));
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens);\n";
-  }
-  void CollectType(DeclIndex* decl_index) const override {
-  }
-  TypeDeclExpr* ReferenceTypeDeclExpr(DeclIndex* decl_index) const override {
-    return decl_index->TypeCheck(decl->value, "");
-  }
-};
+PatternStmt* makeTryStmtFromPattern(PatternDecl* subdecl, TypeDeclExpr* base_type);
 
-struct DefineProduction : public Production {
-  DefineDecl* decl;
-  void DoEmit(EmitContext& ctx) const override {
-    DumpASTTypes(ctx.stream).visitTypeExpr(ReferenceTypeDeclExpr(ctx.index));
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens) {\n";
-    assert(decl->value->getKind() == PatternStmt::Kind::Compound);
-    PatternEmitContext ext_ctx(ctx);
-    auto* stmt = reinterpret_cast<CompoundPatternStmt*>(decl->value);
-    for (auto* stmt : stmt->items) {
-      ext_ctx.EmitToTmp(stmt);
-    }
-    ctx.stream << "  auto* result = new " << name.str << ";\n";
-    for (auto* stmt : stmt->items) {
-      ext_ctx.CopyFromTmp(stmt);
-    }
-    ctx.stream << "  return result;\n";
-    ctx.stream << "}\n";
-  }
-  void DoEmitFwd(EmitContext& ctx) const override {
-    DumpASTTypes(ctx.stream).visitTypeExpr(ReferenceTypeDeclExpr(ctx.index));
-    ctx.stream << " _production_" << name.str << "(Tokenizer& tokens);\n";
-  }
-  void CollectType(DeclIndex* decl_index) const override {
-    auto* type_decls = &decl_index->type_decls;
-    auto it = type_decls->find(name.str);
-    if (it != type_decls->end()) {
-      std::cerr << "Define type Production emission duplicate\n";
-      exit(-1);
-    }
-    auto* type_decl = (*type_decls)[name.str] = new TypeDecl;
-    type_decl->name = name;
-    type_decl->type = decl_index->PatternToStructType(decl->value, "");
-  }
-};
+void DebugPrintStmt(PatternStmt*);
 
-void Emit(Module* m, const parser_spec::TokenizerModuleIndex& token_index) {
-  DeclIndex index;
-  index.mod_name = m->mod_name;
-  index.token_index = &token_index;
-  for (auto* decl : m->decls) {
-    index.IndexConcatSuccessors(decl);
+PatternExpr* getExprProd(tok::Token base, size_t id) {
+  auto* res = new NamedPatternExpr;
+  res->name = WrapToken(base, id);
+  return res;
+}
+
+tok::Token DoExprAnalysis(Module* m, ModuleContext* globals, ExprDecl* decl, TypeDeclExpr* base_type) {
+  std::vector<ExprGroup> groups;
+  ExprGroup tmp_group;
+  for (auto* decl : decl->stmts) {
     switch (decl->getKind()) {
-    case Decl::Kind::Tokenizer:
-      index.tokenizer = reinterpret_cast<TokenizerDecl*>(decl)->name;
+    case Decl::Kind::Pattern:
+      tmp_group.patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
       break;
-    case Decl::Kind::Entry:
-      index.entry = reinterpret_cast<EntryDecl*>(decl)->name;
-      break;
-    case Decl::Kind::Expr: {
-      auto* expr_decl = reinterpret_cast<ExprDecl*>(decl);
-      auto* expr = new ExprProduction(expr_decl);
-      expr->name = expr_decl->name;
-      std::vector<PatternDecl*> loose_pattern_decls;
-      ExprProduction::Group tmp_group;
-      for (auto* decl : expr_decl->stmts) {
-        switch (decl->getKind()) {
-        case Decl::Kind::Pattern:
-          tmp_group.patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
-          break;
-        case Decl::Kind::LeftAssoc: {
-          if (!tmp_group.patterns.empty()) {
-            expr->groups.push_back(std::move(tmp_group));
-          }
-          ExprProduction::Group lhs_group;
-          lhs_group.assoc = ExprProduction::Group::LeftToRight;
-          lhs_group.Populate(reinterpret_cast<LeftAssocDecl*>(decl)->stmts);
-          assert(!lhs_group.patterns.empty());
-          expr->groups.push_back(std::move(lhs_group));
-          tmp_group = ExprProduction::Group();
-          break;
-        }
-        case Decl::Kind::RightAssoc: {
-          if (!tmp_group.patterns.empty()) {
-            expr->groups.push_back(std::move(tmp_group));
-          }
-          ExprProduction::Group rhs_group;
-          rhs_group.assoc = ExprProduction::Group::RightToLeft;
-          rhs_group.Populate(reinterpret_cast<RightAssocDecl*>(decl)->stmts);
-          assert(!rhs_group.patterns.empty());
-          expr->groups.push_back(std::move(rhs_group));
-          tmp_group = ExprProduction::Group();
-          break;
-        }
-        default:
-          std::cerr << "Unknown Decl not handled in expr scope\n";
-          exit(-1);
-        }
-      }
+    case Decl::Kind::LeftAssoc: {
       if (!tmp_group.patterns.empty()) {
-        expr->groups.push_back(std::move(tmp_group));
+        groups.push_back(std::move(tmp_group));
       }
-      index.Register(expr);
-      break;
-    } case Decl::Kind::Pattern: {
-      auto* prod = new LooseProduction();
-      prod->decl = reinterpret_cast<PatternDecl*>(decl);
-      prod->name = prod->decl->name;
-      index.Register(prod);
-      break;
-    } case Decl::Kind::ProductionAndType: {
-      auto* prod = new UnionProduction();
-      auto* prod_decl = reinterpret_cast<ProductionAndTypeDecl*>(decl);
-      prod->decl = decl;
-      prod->name = prod_decl->name;
-      prod->type_name = prod_decl->type_name;
-      for (auto* decl : prod_decl->stmts) {
-        switch (decl->getKind()) {
-        case Decl::Kind::Pattern:
-          prod->patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
-          break;
-        default:
-          std::cerr << "Unknown Decl not handled in expr scope\n";
-          exit(-1);
-        }
-      }
-      index.Register(prod);
-      break;
-    } case Decl::Kind::Production: {
-      auto* prod = new UnionProduction();
-      auto* prod_decl = reinterpret_cast<ProductionDecl*>(decl);
-      prod->decl = decl;
-      prod->name = prod_decl->name;
-      prod->type_name = prod_decl->name;
-      for (auto* decl : prod_decl->stmts) {
-        switch (decl->getKind()) {
-        case Decl::Kind::Pattern:
-          prod->patterns.push_back(reinterpret_cast<PatternDecl*>(decl));
-          break;
-        default:
-          std::cerr << "Unknown Decl not handled in expr scope\n";
-          exit(-1);
-        }
-      }
-      index.Register(prod);
-      break;
-    } case Decl::Kind::Define: {
-      auto* prod = new DefineProduction();
-      prod->decl = reinterpret_cast<DefineDecl*>(decl);
-      prod->name = prod->decl->name;
-      index.Register(prod);
-      break;
-    } case Decl::Kind::Type: {
-      index.RegisterType(reinterpret_cast<TypeDecl*>(decl));
-      break;
-    } default:
-      std::cerr << "Unknown Decl not handled\n";
-      exit(-1);
+      ExprGroup lhs_group;
+      lhs_group.assoc = ExprGroup::LeftToRight;
+      lhs_group.Populate(reinterpret_cast<LeftAssocDecl*>(decl)->stmts);
+      assert(!lhs_group.patterns.empty());
+      groups.push_back(std::move(lhs_group));
+      tmp_group = ExprGroup();
       break;
     }
+    case Decl::Kind::RightAssoc: {
+      if (!tmp_group.patterns.empty()) {
+        groups.push_back(std::move(tmp_group));
+      }
+      ExprGroup rhs_group;
+      rhs_group.assoc = ExprGroup::RightToLeft;
+      rhs_group.Populate(reinterpret_cast<RightAssocDecl*>(decl)->stmts);
+      assert(!rhs_group.patterns.empty());
+      groups.push_back(std::move(rhs_group));
+      tmp_group = ExprGroup();
+      break;
+    }
+    default:
+      std::cerr << "Unknown Decl not handled in expr scope\n";
+      exit(-1);
+    }
   }
-  index.EmitModule();
+  if (!tmp_group.patterns.empty()) {
+    groups.push_back(std::move(tmp_group));
+  }
+
+  size_t i = 0;
+  for (auto& group : groups) {
+    auto grouped = group.DoGrouping();
+    assert((i != 0 || grouped.literal.size() > 0) && "Base level must contain literals.");
+    if (!grouped.binary.empty()) {
+      assert(i > 0 && "Binary ops nonsensical on first level");
+      assert(grouped.binary.size() == group.patterns.size() && "Must be all binary or nothing");
+      auto child_i = group.assoc == ExprGroup::RightToLeft ? i : i - 1;
+      auto* lit_body = new CompoundPatternStmt;
+      for (auto& binary : grouped.binary) {
+        assert(binary->getKind() == Decl::Kind::Pattern);
+        auto* subdecl = reinterpret_cast<PatternDecl*>(binary);
+        auto* copy = new PatternDecl(*subdecl);
+        auto* bodycopy = new CompoundPatternStmt(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
+        copy->value = bodycopy;
+
+        {
+          auto* tmp = bodycopy->items[0];
+          assert(tmp->getKind() == PatternStmt::Kind::Assign);
+          auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
+          assign_tmp->value = new PopPatternExpr;
+        }
+        
+        {
+          auto* tmp = bodycopy->items.back();
+          assert(tmp->getKind() == PatternStmt::Kind::Assign);
+          auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
+          assign_tmp->value = getExprProd(decl->name, child_i);
+        }
+
+        lit_body->items.push_back(makeTryStmtFromPattern(copy, base_type));
+      }
+      if (group.assoc == ExprGroup::RightToLeft) {
+        if (i != 0) {
+          auto* tmp1 = new ConditionalPatternStmt;
+          auto* tmp2 = new CompoundPatternStmt;
+          tmp1->value = tmp2;
+          auto* res = new WrapPatternStmt;
+          res->value = new PopPatternExpr;
+          tmp2->items.push_back(res);
+          lit_body->items.push_back(tmp1);
+        }
+
+        auto* cdecl = new DefineWithTypeDecl;
+        cdecl->name = WrapToken(decl->name, i);
+        cdecl->type = base_type; 
+        lit_body = RotateAndVerifyTrys(globals, lit_body);
+        auto* push_prefix = new PushPatternStmt;
+        push_prefix->value = getExprProd(decl->name, i - 1);
+        lit_body->items.insert(lit_body->items.begin(), push_prefix);
+        cdecl->value = lit_body;
+        m->decls.push_back(cdecl);
+        ++i;
+      } else {
+        assert(group.assoc == ExprGroup::LeftToRight && "Binary ops must have associativity");
+        auto* cdecl = new DefineWithTypeDecl;
+        cdecl->name = WrapToken(decl->name, i);
+        cdecl->type = base_type; 
+        auto* tmp = new CompoundPatternStmt;
+        auto* expr_tail_expr = new ExprTailLoopPatternStmt;
+        expr_tail_expr->type = base_type;
+        expr_tail_expr->base = getExprProd(decl->name, i - 1);
+        expr_tail_expr->value = RotateAndVerifyTrys(globals, lit_body);
+        tmp->items.push_back(expr_tail_expr);
+        cdecl->value = tmp;
+        m->decls.push_back(cdecl);
+        ++i;
+      }
+    } else {
+      assert(grouped.binary.size() == 0 && "Binary ops not handled\n");
+      auto* lit_body = new CompoundPatternStmt;
+      for (auto& prefix : grouped.prefix) {
+        assert(prefix->getKind() == Decl::Kind::Pattern);
+        auto* subdecl = reinterpret_cast<PatternDecl*>(prefix);
+        auto* copy = new PatternDecl(*subdecl);
+        auto* bodycopy = new CompoundPatternStmt(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
+        copy->value = bodycopy;
+        auto* tmp = bodycopy->items.back();
+        assert(tmp->getKind() == PatternStmt::Kind::Assign);
+        auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
+        assign_tmp->value = getExprProd(decl->name, i);
+        lit_body->items.push_back(makeTryStmtFromPattern(copy, base_type));
+      }
+
+      for (auto& literal : grouped.literal) {
+        assert(literal->getKind() == Decl::Kind::Pattern);
+        lit_body->items.push_back(makeTryStmtFromPattern(reinterpret_cast<PatternDecl*>(literal), base_type));
+      }
+      
+      if (!lit_body->items.empty()) {
+        if (i != 0) {
+          auto* tmp1 = new ConditionalPatternStmt;
+          auto* tmp2 = new CompoundPatternStmt;
+          tmp1->value = tmp2;
+          auto* res = new WrapPatternStmt;
+          res->value = getExprProd(decl->name, i - 1);
+          tmp2->items.push_back(res);
+          lit_body->items.push_back(tmp1);
+        }
+//        assert(i == 0 && "TODO: non 0 literals...");
+        auto* cdecl = new DefineWithTypeDecl;
+        cdecl->name = WrapToken(decl->name, i);
+        cdecl->type = base_type; 
+        cdecl->value = RotateAndVerifyTrys(globals, lit_body);
+        m->decls.push_back(cdecl);
+        ++i;
+      }
+
+      lit_body = new CompoundPatternStmt;
+      for (auto& postfix : grouped.postfix) {
+        assert(postfix->getKind() == Decl::Kind::Pattern);
+        auto* subdecl = reinterpret_cast<PatternDecl*>(postfix);
+        auto* copy = new PatternDecl(*subdecl);
+        auto* bodycopy = new CompoundPatternStmt(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
+        copy->value = bodycopy;
+        auto* tmp = bodycopy->items[0];
+        assert(tmp->getKind() == PatternStmt::Kind::Assign);
+        auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
+        assign_tmp->value = new PopPatternExpr;
+        lit_body->items.push_back(makeTryStmtFromPattern(copy, base_type));
+      }
+
+      if (!lit_body->items.empty()) {
+        auto* cdecl = new DefineWithTypeDecl;
+        cdecl->name = WrapToken(decl->name, i);
+        cdecl->type = base_type; 
+        auto* tmp = new CompoundPatternStmt;
+        auto* expr_tail_expr = new ExprTailLoopPatternStmt;
+        expr_tail_expr->type = base_type;
+        expr_tail_expr->base = getExprProd(decl->name, i - 1);
+        expr_tail_expr->value = RotateAndVerifyTrys(globals, lit_body);
+        tmp->items.push_back(expr_tail_expr);
+        cdecl->value = tmp;
+        m->decls.push_back(cdecl);
+        ++i;
+      }
+    }
+  }
+  return WrapToken(decl->name, i - 1);
+}
+
+struct TypeCheckContext {
+  TypeDeclExpr* self = nullptr;
+  ModuleContext* globals;
+  std::vector<TypeDeclExpr*> decls;
+  int pop_id = 0;
+  
+  TypeCheckContext* ConcatContext() {
+    auto* res = new TypeCheckContext;
+    res->globals = globals;
+    res->self = self;
+    return res;
+  }
+
+  static TypeCheckContext* makeRoot(ModuleContext* globals) {
+    auto* res = new TypeCheckContext;
+    res->globals = globals;
+    return res;
+  }
+
+  TypeDeclExpr* getSelfType() {
+    assert(self);
+    return self; 
+  }
+
+  void Push(TypeDeclExpr* expr) {
+    assert(expr);
+    decls.push_back(expr);
+  }
+  
+  FieldTypeCheckContext* newTypeCtx() {
+    auto* res = new FieldTypeCheckContext;
+    res->globals = globals;
+    return res;
+  }
+
+  TypeCheckContext* NewConditionalContext() {
+    return new TypeCheckContext(*this);
+  }
+
+  TypeDeclExpr* Pop() {
+    assert(pop_id < decls.size());
+    return decls[pop_id++];
+  }
+};
+
+static TypeDeclExpr* theTokenType = [] {
+  auto* res = new NamedTypeDeclExpr;
+  res->name.str = "Token";
+  return res;
+}();
+
+static TypeDeclExpr* theArrayType = [] {
+  auto* res = new NamedTypeDeclExpr;
+  res->name.str = "Array";
+  return res;
+}();
+
+struct EmitContext {
+  int Push() { return push_id++; }
+  int Pop() { return pop_id++; }
+  int push_id = 0;
+  int pop_id = 0;
+
+
+  EmitContext* ConcatContext() {
+    auto* res = new EmitContext;
+    res->globals = globals;
+    return res;
+  }
+
+  static EmitContext* makeRoot(ModuleContext* globals) {
+    auto* res = new EmitContext;
+    res->globals = globals;
+    return res;
+  }
+
+  TypeDeclExpr* TypeCheck(PatternStmt *stmt) {
+    auto it = globals->types_cache.find(stmt);
+    if (it != globals->types_cache.end()) {
+      return it->second;
+    }
+    auto* res = new NamedTypeDeclExpr;
+    res->name.str = "Unknown";
+    return res;
+  }
+
+  PatternStmt *GetSuccessor(PatternExpr* expr) {
+    auto& concat_successors = globals->concat_successors; 
+    auto it = concat_successors.find(expr);
+    if (it == concat_successors.end()) return nullptr;
+    return it->second;
+  }
+
+  EmitContext* NewConditionalContext() {
+    auto* result = new EmitContext(*this);
+    result->has_result = false;
+    return result;
+  }
+
+  EmitContext* NewExprTailLoopContext() {
+    auto* result = new EmitContext(*this);
+    result->is_inside_expr = true;
+    return result;
+  }
+
+  ModuleContext* globals;
+  void RegisterConcatSuccessors(const std::vector<PatternStmt*>& items) {
+    auto& concat_successors = globals->concat_successors; 
+    for (size_t i = 0; i + 1 < items.size(); ++i) {
+      auto* item = items[i];
+      auto* value = getValue(item);
+      if (value && (value->getKind() == PatternExpr::Kind::Concat
+                    || value->getKind() == PatternExpr::Kind::CommaConcat)) {
+        PatternStmt* succ = nullptr;
+        for (size_t j = i + 1; j < items.size() && !succ; ++j) {
+          succ = findSuccessor(items[i + 1]);
+        }
+        if (succ) concat_successors[value] = succ;
+      }
+    }
+  }
+
+  bool is_inside_expr = false;
+  
+  bool has_result = false;
+};
+
+PatternStmt* getFirstItem(PatternStmt* stmt) {
+  assert(stmt->getKind() == PatternStmt::Kind::Compound);
+  auto& items = reinterpret_cast<CompoundPatternStmt*>(stmt)->items;
+  assert(items.size() > 0);
+  return items[0];
+}
+
+}  // namespace production_spec
+
+#include "gen/parser/lower_parser_to_functions.cc"
+
+namespace production_spec {
+  
+TypeDeclExpr* ModuleContext::getType(string_view name) {
+  auto it = productions.find(name);
+  if (it != productions.end()) {
+    if (!it->second->type) {
+      auto* tc_ctx = TypeCheckContext::makeRoot(this);
+      it->second->type = doTypeCheck(tc_ctx, it->second->value);
+    }
+    assert(it->second->type);
+    return it->second->type;
+  }
+  std::cerr << "Could not find production: " << name << "\n";
+  exit(-1);
+}
+
+void ModuleContext::typeCheckAll() {
+  for (auto& decl : productions) {
+    auto* tc_ctx = TypeCheckContext::makeRoot(this);
+    doTypeCheck(tc_ctx, decl.second->value);
+  }
 }
 
 }  // namespace production_spec
@@ -1402,8 +824,28 @@ int main(int argc, char **argv){
   parser_spec::Tokenizer tokens_tok(contents_tok.c_str());
   auto* m2 = parser_spec::parser::DoParse(tokens_tok);
 
-  m2 = parser_spec::LoweringToNFA().visit(m2);
+  auto* ctx = new production_spec::ModuleContext;
+  {
+    m2 = parser_spec::LoweringToNFA().visit(m2);
+    parser_spec::TokenizerModuleIndex idx(m2);
+    ctx->all_tokens = idx.getTokenSet(getTokenizerName(m));
+    auto& stream = std::cout;
+    if (true) {
+      stream << "namespace " << m->mod_name.str << " {\n";
+      idx.EmitTokenizer("basic", stream);
+      stream << "}  // namespace " << m->mod_name.str << "\n";
+    }
+  }
 
-  parser_spec::TokenizerModuleIndex idx(m2);
-  production_spec::Emit(m, idx);
+  m = production_spec::lowerProductionToMerge(ctx, m);
+
+  ctx->m = m;
+  production_spec::doModuleTypeCheck(ctx, m);
+  
+  production_spec::ImplicitDumpTypes(m);
+
+  production_spec::emitBasics(ctx, m);
+
+  // Emit other things??
+  // production_spec::Emit(m, idx);
 }

@@ -1,0 +1,69 @@
+module lowering_spec;
+
+tokenizer basic;
+entry Module;
+
+expr TypeRef {
+  pattern Void { "unit" }
+  pattern Member { %base = _ "::" %name = identifier }
+  pattern Named { %name = identifier }
+  pattern Template { %base = _ "<" %args = concat { TypeRef } ">" }
+}
+
+expr Expr {
+  pattern New { "new" %type = TypeRef %body = CompoundStmt }
+  pattern Number { %value = number }
+  pattern Str { %value = str }
+  pattern Dot { %base = _ "." %name = identifier }
+  pattern Arrow { %base = _ "->" %name = identifier }
+  pattern Named { %name = identifier }
+  pattern Index { %base = _ "[" %args = comma_array(comma) { Expr } "]" }
+  pattern ColonColon { %base = _ "::" %name = identifier }
+  pattern Call { %base = _ "(" %args = comma_array(comma) { Expr } ")" }
+  left {
+    pattern CompEqEq { %lhs = _ "==" %rhs = _ }
+  }
+  right {
+    pattern Assign { %lhs = _ "=" %rhs = _ }
+  }
+}
+
+production CompoundStmt: Stmt {
+  pattern Compound { "{" %stmts = concat { Stmt } "}" }
+}
+
+production Stmt {
+  pattern ReturnVoid { "return" ";" }
+  pattern Return { "return" %expr = Expr ";" }
+  pattern Let { "let" %name = identifier "=" %expr = Expr ";" }
+  pattern Var { "var" %name = identifier ":" %type = TypeRef ";" }
+  pattern OpenWithType { "open" %name = identifier ":" %type = TypeRef %body = CompoundStmt }
+  pattern Open { "open" %name = identifier %body = CompoundStmt }
+  pattern Case { "case" "." %name = identifier ":" }
+  pattern For { "for" %name = identifier "in" %sequence = Expr %body = CompoundStmt }
+  pattern Loop { "loop" %body = CompoundStmt }
+  pattern IfElse { "if" "(" %cond = Expr ")" %body = CompoundStmt "else" %else_body = CompoundStmt }
+  pattern If { "if" "(" %cond = Expr ")" %body = CompoundStmt }
+  pattern Scope { "scope" %name = identifier "=" %expr = Expr %body = CompoundStmt }
+  pattern Default { "default" ":" }
+  pattern Emitter { "emit" %body = CompoundStmt }
+  pattern DbgEmitter { "dbg_emit" %body = CompoundStmt }
+  pattern Break { "break" ";" }
+  pattern Discard { %expr = Expr ";" }
+}
+
+define FuncArg {
+  %name = identifier ":" %type = TypeRef 
+}
+
+production Decl {
+  pattern Context { "context" %name = identifier ":" %type = TypeRef ";" }
+  pattern Func { "func" %name = identifier
+  "(" %args = comma_array(comma) { FuncArg} ")"
+  "->" %ret_t = TypeRef %body = CompoundStmt }
+}
+
+define Module {
+  "module" %mod_name = identifier ";"
+  %decls = concat { Decl }
+}

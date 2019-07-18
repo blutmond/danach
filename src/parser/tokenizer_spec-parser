@@ -3,7 +3,6 @@ tokenizer basic;
 entry Module;
 
 
-
 type Edge = {
   Range = (start: char, end: char, next: Node);
   Unary = (match: char, next: Node);
@@ -38,6 +37,8 @@ production Edge {
 define Node {
   %edges = concat { Edge }
 }
+
+type NodePair = (st: Node, ed: Node);
 
 production Decl {
   pattern Regex { "regex" %name = identifier "{" %items = concat { TokenDecl } "}" }
