@@ -11,6 +11,8 @@ mkdir -p .build/gen/parser || exit -1
 .build/parser src/parser/parser_spec-parser src/parser/parser_spec-tokenizer > .build/gen/parser/parser-spec.cc || exit -1
 .build/parser src/parser/lowering_spec-parser src/parser/lowering_spec-tokenizer > .build/gen/parser/lowering_spec.cc || exit -1
 
+.build/lowering-spec-tool src/parser/emit_lowering_spec > .build/gen/parser/emit_lowering_spec.cc || exit -1
+
 $CLANG src/parser/lowering-spec-tool.cc -o .build/lowering-spec-tool || exit -1
 
 .build/lowering-spec-tool src/parser/lower_to_nfa > .build/gen/parser/lower_to_nfa.cc || exit -1

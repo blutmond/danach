@@ -51,6 +51,13 @@ class ContextFinderContext {
   }
 };
 
+void increment(int& i) { ++i; }
+
+CompoundStmt* AsCompound(Stmt* stmt) {
+  assert(stmt->getKind() == Stmt::Kind::Compound);
+  return reinterpret_cast<CompoundStmt*>(stmt);
+}
+
 // Do analysis:
 // - Find functions + contexts.
 // - Find all calls to other funcs from funcs.
@@ -62,7 +69,7 @@ class ContextFinderContext {
 
 }  // namespace lowering_spec
 
-#include "parser/emit-lowering-spec.cc"
+#include "gen/parser/emit_lowering_spec.cc"
 
 int main(int argc, char **argv){
   if (argc <= 1) {
