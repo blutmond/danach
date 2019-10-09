@@ -1,0 +1,27 @@
+module rule_spec;
+
+entry Module;
+tokenizer basic;
+
+expr Expr {
+  pattern Name { %name = identifier }
+  pattern StringLiteral { %value = str }
+  pattern ArrayLiteral { "[" %values = comma_array(comma) { Expr } "]" }
+  pattern Dot { %base = _ "." %name = identifier }
+}
+
+define Option {
+  %key = identifier "=" %value = Expr ";"
+}
+
+production Decl {
+  pattern Import {"import" %path = str "as" %name = identifier ";" }
+  pattern OldParser {"old_parser" %name = identifier "{" %options = concat { Option } "}" }
+  pattern Library {"lib" %name = identifier "{" %options = concat { Option } "}" }
+  pattern Link { "link" %fname = str "{" %options = concat { Option } "}" }
+
+}
+
+define Module {
+  %decls = concat { Decl }
+}
