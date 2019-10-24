@@ -305,6 +305,7 @@ namespace rule_spec{
 struct Decl;
 struct ImportDecl;
 struct OldParserDecl;
+struct OldLoweringSpecDecl;
 struct LibraryDecl;
 struct LinkDecl;
 struct Expr;
@@ -317,7 +318,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, OldParser, Library, Link,
+    Import, OldParser, OldLoweringSpec, Library, Link,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -333,6 +334,12 @@ struct ImportDecl: public Decl {
 
 struct OldParserDecl: public Decl {
   OldParserDecl() : Decl(Kind::OldParser) {}
+  tok::Token name;
+  std::vector<Option*> options;
+};
+
+struct OldLoweringSpecDecl: public Decl {
+  OldLoweringSpecDecl() : Decl(Kind::OldLoweringSpec) {}
   tok::Token name;
   std::vector<Option*> options;
 };
@@ -487,6 +494,26 @@ if (tokens.peak_check_str("old_parser")) {
 tokens.expect("old_parser");
 auto result = ({
 auto __current_self = new OldParserDecl;__current_self->name = tokens.expect(tok::identifier);
+tokens.expect("{");
+__current_self->options = ([&]{
+std::vector<Option*> __current_vector__;
+    while (true) {
+   if (tokens.peak_check_str("}")) { break; }
+ __current_vector__.push_back([&]{auto result = _production_Option(tokens);
+return result;
+ }());  }
+return __current_vector__;
+}())
+;
+tokens.expect("}");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("old_lowering_spec")) {
+tokens.expect("old_lowering_spec");
+auto result = ({
+auto __current_self = new OldLoweringSpecDecl;__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;

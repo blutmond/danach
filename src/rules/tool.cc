@@ -162,6 +162,16 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
   return res;
 }
 
+LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResult*>& deps,
+                                             const char* lowering_spec, const char* outname) {
+  std::vector<const char*> eval = {".build/lowering-spec-tool", lowering_spec};
+  RunWithPipe(std::move(eval), outname);
+  auto* res = new LibraryBuildResult;
+  res->deps = deps;
+  return res;
+}
+
+
 LibraryBuildResult *MakeDefaultFlags() {
   auto* res = new LibraryBuildResult;
   res->link_flags = {"-lstdc++"};
@@ -255,6 +265,15 @@ class RuleFile {
       }
       libs[key].decl = decl;
       break;
+    } case Decl::Kind::OldLoweringSpec: {
+      auto* decl = reinterpret_cast<OldLoweringSpecDecl*>(decl_);
+      auto key = std::string(decl->name.str);
+      if (libs.find(key) != libs.end()) {
+        fprintf(stderr, "Duplicate rule: %s\n", std::string(decl->name.str).c_str());
+        exit(EXIT_FAILURE);
+      }
+      libs[key].decl = decl;
+      break;
     } case Decl::Kind::Library: {
       auto* decl = reinterpret_cast<LibraryDecl*>(decl_);
       auto key = std::string(decl->name.str);
@@ -340,6 +359,25 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
 
     SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
                        strdup(filename + "/" + tokenizer),
+                       strdup(".generated/" + filename_gen + "/" + cc_out));
+
+    it->second.result = new LibraryBuildResult; 
+    break;
+  } case Decl::Kind::OldLoweringSpec: {
+    auto* decl = reinterpret_cast<OldLoweringSpecDecl*>(decl_);
+    auto options = IndexOptionSet(filename, rule_name, decl->options, {"src", "cc_out"});
+
+    auto src = GetStringOption(options["src"]);
+    auto cc_out = GetStringOption(options["cc_out"]);
+
+    std::string filename_gen;
+    if (string_view(filename).substr(0, 4) == "src/") {
+      filename_gen = "gen/" + filename.substr(4);
+    } else {
+      filename_gen = filename;
+    }
+
+    SimpleOldLoweringSpecGen({parent->default_flags}, strdup(filename + "/" + src),
                        strdup(".generated/" + filename_gen + "/" + cc_out));
 
     it->second.result = new LibraryBuildResult; 
@@ -437,6 +475,8 @@ int main(int argc, char **argv) {
   RuleSet rule_set;
   Run({"/bin/mkdir", "-p", ".build/objects/src/rules/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/rules/"});
+  Run({"/bin/mkdir", "-p", ".build/objects/src/parser/"});
+  Run({"/bin/mkdir", "-p", ".generated/gen/parser/"});
   rule_set.GetFile(argv[1])->Link(argv[2]);
   // TODO: Remove this at some point
   if (argv[2] == string_view("rules-dynamic")) {
