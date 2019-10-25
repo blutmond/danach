@@ -1,3 +1,5 @@
+#include "parser/parser-support.h"
+
 namespace rule_spec {
 namespace tok {
 enum T {arrow, close_arr, close_brace, close_bracket, close_paran, colon, coloncolon, comma, dot, eof, equal, identifier, number, open_arr, open_brace, open_bracket, open_paran, percent, pipe, plus, semi, star, str};

@@ -13,11 +13,11 @@
 /bin/mkdir -p .generated/gen/parser/
 /usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/src/parser/tool.d -MD -c src/parser/tool.cc -o .build/objects/src/parser/tool.o
 /usr/bin/clang-6.0 -Wall .build/objects/src/parser/tool.o -lstdc++ -o .build/parser-dynamic
+/bin/mv .build/parser-dynamic .build/parser
 /bin/mkdir -p .build/objects/src/rules/
 /bin/mkdir -p .generated/gen/rules/
 /bin/mkdir -p .build/objects/src/parser/
 /bin/mkdir -p .generated/gen/parser/
 /usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/src/parser/lowering-spec-tool.d -MD -c src/parser/lowering-spec-tool.cc -o .build/objects/src/parser/lowering-spec-tool.o
 /usr/bin/clang-6.0 -Wall .build/objects/src/parser/lowering-spec-tool.o -lstdc++ -o .build/lowering-spec-tool-dynamic
-mv .build/parser-dynamic .build/parser
-mv .build/lowering-spec-tool-dynamic .build/lowering-spec-tool
+/bin/mv .build/lowering-spec-tool-dynamic .build/lowering-spec-tool

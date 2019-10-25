@@ -478,9 +478,15 @@ int main(int argc, char **argv) {
   Run({"/bin/mkdir", "-p", ".build/objects/src/parser/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/parser/"});
   rule_set.GetFile(argv[1])->Link(argv[2]);
-  // TODO: Remove this at some point
+  // TODO: Remove this at some point (These are for linker errors).
   if (argv[2] == string_view("rules-dynamic")) {
     Run({"/bin/mv", ".build/rules-dynamic", ".build/rules"});
+  }
+  if (argv[2] == string_view("parser-dynamic")) {
+    Run({"/bin/mv", ".build/parser-dynamic", ".build/parser"});
+  }
+  if (argv[2] == string_view("lowering-spec-tool-dynamic")) {
+    Run({"/bin/mv", ".build/lowering-spec-tool-dynamic", ".build/lowering-spec-tool"});
   }
 
   printf("\e[32mSuccess!\e[m\n");

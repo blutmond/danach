@@ -7,6 +7,4 @@ echo "#!/bin/bash" > /tmp/bootstrap-tmp.sh
 cat /tmp/bootstrap-tmp.sh | grep -v "Success!" | grep -v "^.build/parser" | grep -v "^.build/lowering-spec-tool" > /tmp/bootstrap.sh
 chmod +x /tmp/bootstrap.sh
 rm /tmp/bootstrap-tmp.sh
-echo "mv .build/parser-dynamic .build/parser" >> /tmp/bootstrap.sh
-echo "mv .build/lowering-spec-tool-dynamic .build/lowering-spec-tool" >> /tmp/bootstrap.sh
 mv /tmp/bootstrap.sh tools/bootstrapping.sh -f

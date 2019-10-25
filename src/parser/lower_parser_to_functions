@@ -507,7 +507,7 @@ func doModuleTypeCheck(globals: ModuleContext, m: Module) -> unit {
   globals->typeCheckAll();
 }
 
-func emitBasics(globals: ModuleContext, m: Module) -> unit {
+func emitBasics(globals: ModuleContext, m: Module, is_header: bool) -> unit {
   emit { "namespace "; m->mod_name.str; "{\n"; }
   emit { "namespace parser {\n"; }
   for decl in m->decls {
@@ -525,6 +525,8 @@ func emitBasics(globals: ModuleContext, m: Module) -> unit {
     }
   }
 
+if (is_header) {
+} else {
   for decl in m->decls {
     open decl : Decl {
     case .DefineWithType:
@@ -545,6 +547,7 @@ func emitBasics(globals: ModuleContext, m: Module) -> unit {
     default:
     }
   }
+}
 
   emit { "}  // namespace parser\n"; }
   emit { "}  // namespace "; m->mod_name.str; "\n"; }

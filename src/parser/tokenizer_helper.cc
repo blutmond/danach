@@ -1,16 +1,4 @@
-#include <string>
-#include <experimental/string_view>
-#include <iostream>
-#include <vector>
-#include <fstream>
-#include <map>
-#include <set>
-#include <algorithm>
-#include <functional>
-
-using std::experimental::string_view;
-
-#include "parser/line_number_helper.cc"
+#include "parser/parser-support.h"
 
 std::string LoadFile(const std::string& filename) {
   std::ifstream in(filename, std::ios::in | std::ios::binary);
@@ -26,3 +14,21 @@ std::string LoadFile(const std::string& filename) {
   in.close();
   return contents;
 }
+
+LineInfo GetLineInfo(const char* st, const char* cur) {
+  if (cur < st) {
+    std::cerr << "Problem!" << __FILE__ << " " << __LINE__ << "\n";
+    exit(255);
+  }
+  LineInfo res {1, 0};
+  const char* last_start = st;
+  for (; st < cur; ++st) {
+    if (*st == '\n') {
+      last_start = st + 1;
+      res.line += 1;
+    }
+  }
+  res.col = 1 + (cur - last_start);
+  return res;
+}
+

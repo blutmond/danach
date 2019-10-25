@@ -818,6 +818,12 @@ int main(int argc, char **argv){
   auto contents = LoadFile(argv[1]);
   auto contents_tok = LoadFile(argv[2]);
 
+  bool is_header = argc > 3 && argv[3] == string_view("header");
+  if (is_header) {
+    std::cout << "#pragma once\n";
+  }
+  std::cout << "#include \"parser/parser-support.h\"\n\n";
+
   production_spec::Tokenizer tokens(contents.c_str());
   auto* m = production_spec::parser::DoParse(tokens);
 
@@ -832,7 +838,7 @@ int main(int argc, char **argv){
     auto& stream = std::cout;
     if (true) {
       stream << "namespace " << m->mod_name.str << " {\n";
-      idx.EmitTokenizer("basic", stream);
+      idx.EmitTokenizer("basic", stream, is_header);
       stream << "}  // namespace " << m->mod_name.str << "\n";
     }
   }
@@ -844,7 +850,7 @@ int main(int argc, char **argv){
   
   production_spec::ImplicitDumpTypes(m);
 
-  production_spec::emitBasics(ctx, m);
+  production_spec::emitBasics(ctx, m, is_header);
 
   // Emit other things??
   // production_spec::Emit(m, idx);

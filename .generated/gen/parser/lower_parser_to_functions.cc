@@ -19,7 +19,7 @@ void collectTypeFields(FieldTypeCheckContext* field_tc_ctx, TypeCheckContext* tc
 TypeDeclExpr* doTypeCheckExpr(TypeCheckContext* tc_ctx, PatternExpr* expr);
 TypeDeclExpr* doTypeCheck(TypeCheckContext* tc_ctx, PatternStmt* s);
 void doModuleTypeCheck(ModuleContext* globals, Module* m);
-void emitBasics(ModuleContext* globals, Module* m);
+void emitBasics(ModuleContext* globals, Module* m, bool is_header);
 PatternStmt* makeTryStmtFromPattern(PatternDecl* subdecl, TypeDeclExpr* base_type);
 Decl* lowerProductionToMergeDecl(Module* m, ModuleContext* globals, Decl* d);
 Module* lowerProductionToMerge(ModuleContext* globals, Module* m);
@@ -1119,7 +1119,7 @@ break;
 }
 globals->typeCheckAll();
 }
-void emitBasics(ModuleContext* globals, Module* m) {
+void emitBasics(ModuleContext* globals, Module* m, bool is_header) {
 std::cout << ("namespace ");
 std::cout << (m->mod_name.str);
 std::cout << ("{\n");
@@ -1153,6 +1153,8 @@ break;
 }
 }
 }
+if (is_header) {
+} else {
 for (auto decl : m->decls) {
 {
 auto __tmp_switch_name = decl;
@@ -1187,6 +1189,7 @@ std::cout << ("(tokens);\n");
 std::cout << ("}\n");
 break;
 } default: {
+}
 }
 }
 }

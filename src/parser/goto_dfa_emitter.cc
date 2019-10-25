@@ -122,7 +122,7 @@ struct TokenizerIndex {
 
   bool isToken(string_view str) const { return all_tokens.find(str) != all_tokens.end(); }
 
-  void Emit(std::ostream& stream) const {
+  void Emit(std::ostream& stream, bool is_header) const {
     stream << "namespace tok {\n";
     stream << "enum T {";
     bool first = false;
@@ -132,33 +132,37 @@ struct TokenizerIndex {
       first = true;
     }
     stream << "};\n";
-    stream << "const char* StringifyType(T t) {\n";
+    stream << "const char* StringifyType(T t)";
+    if (is_header) { stream << ";\n"; }
+    else {
+    stream << " {\n";
     stream << "switch(t) {\n";
     for (auto& name : all_tokens) {
       stream << "case " << name << ": return \"" << name << "\";";
     }
     stream << "}\n";
     stream << "}\n";
+    }
     stream << R"(
 struct Token {
   T type = tok::eof;
   string_view str;
 };
 
-Token MakeToken(T t, const char* st, const char* ed) {
+Token MakeToken(T t, const char* st, const char* ed))"; if (is_header) { stream << ";"; } else { stream << R"( {
   return Token{t, string_view(st, ed - st)};
-}
+})"; } stream << R"(
 
-void PrintToken(Token t) {
+void PrintToken(Token t))"; if (is_header) { stream << ";"; } else { stream << R"( {
   std::cout << "tok::" << StringifyType(t.type) << " : \"" << t.str << "\"\n";
-}
+})"; } stream << R"(
 
-void unexpected(char c) {
+void unexpected(char c))"; if (is_header) { stream << ";"; } else { stream << R"( {
   fprintf(stderr, "unexpected: \"%c\"\n", c);
   exit(-1);
-}
+})"; } stream << R"(
 
-Token GetNext(const char*& cur) {
+Token GetNext(const char*& cur))"; if (is_header) { stream << ";\n"; } else { stream << R"( {
     const char* st;
     int c;
   start:
@@ -170,6 +174,7 @@ Token GetNext(const char*& cur) {
     GotoDFACPPEmitter().emitRoot(decl->root);
 
     stream << "}\n";
+}
 
     stream << "} // namespace tok\n";
     stream << R"(
@@ -251,13 +256,13 @@ struct TokenizerModuleIndex {
     return it->second->all_tokens;
   }
 
-  void EmitTokenizer(string_view str, std::ostream& stream) const {
+  void EmitTokenizer(string_view str, std::ostream& stream, bool is_header) const {
     auto it = tokenizers.find(str);
     if (it == tokenizers.end()) {
       std::cerr << "No such tokenizer: " << str << "\n";
       exit(-1);
     }
-    it->second->Emit(stream);
+    it->second->Emit(stream, is_header);
   }
 };
 
