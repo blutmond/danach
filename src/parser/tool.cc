@@ -1,9 +1,9 @@
+#include "gen/parser/parser-spec.h"
+#include "gen/parser/tokenizer-spec.h"
 #include <assert.h>
 // Most of this file can and should be folded back in as
 // "lowering" code, but might need some features for that...
 #include "parser/tokenizer_helper.cc"
-#include "gen/parser/parser-spec.cc"
-#include "gen/parser/tokenizer-spec.cc"
 #include <unordered_map>
 #include <unordered_set>
 #include <assert.h>

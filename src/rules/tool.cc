@@ -154,9 +154,17 @@ LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>&
 
 LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& deps,
                                        const char* parser, const char* tokenizer,
-                                       const char* outname) {
-  std::vector<const char*> eval = {".build/parser", parser, tokenizer};
-  RunWithPipe(std::move(eval), outname);
+                                       const char* outname, const char* h_outname,
+                                       string_view folder, string_view cxx_name) {
+  {
+    std::vector<const char*> eval = {".build/parser", parser, tokenizer};
+    RunWithPipe(std::move(eval), outname);
+  }
+  if (h_outname) {
+    std::vector<const char*> eval = {".build/parser", parser, tokenizer, "header"};
+    RunWithPipe(std::move(eval), h_outname);
+    return SimpleCompileCXXFile(deps, folder, cxx_name); 
+  }
   auto* res = new LibraryBuildResult;
   res->deps = deps;
   return res;
@@ -179,7 +187,7 @@ LibraryBuildResult *MakeDefaultFlags() {
   return res;
 }
 
-#include "gen/rules/rule-spec.cc"
+#include "gen/rules/rule-spec.h"
 
 std::unordered_map<string_view, rule_spec::Option*> IndexOptionSet(
     string_view filename,
@@ -344,11 +352,13 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
   switch (decl_->getKind()) {
   case Decl::Kind::OldParser: {
     auto* decl = reinterpret_cast<OldParserDecl*>(decl_);
-    auto options = IndexOptionSet(filename, rule_name, decl->options, {"parser", "tokens", "cc_out"});
+    auto options = IndexOptionSet(filename, rule_name, decl->options, {"parser", "tokens", "cc_out", "h_out"});
 
     auto parser = GetStringOption(options["parser"]);
     auto tokenizer = GetStringOption(options["tokens"]);
     auto cc_out = GetStringOption(options["cc_out"]);
+    std::string h_out;
+    h_out = GetStringOption(options["h_out"]);
 
     std::string filename_gen;
     if (string_view(filename).substr(0, 4) == "src/") {
@@ -357,11 +367,13 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
       filename_gen = filename;
     }
 
-    SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
+    auto* res = SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
                        strdup(filename + "/" + tokenizer),
-                       strdup(".generated/" + filename_gen + "/" + cc_out));
+                       strdup(".generated/" + filename_gen + "/" + cc_out),
+                       !h_out.empty() ? strdup(".generated/" + filename_gen + "/" + h_out) : nullptr,
+                       ".generated/" + filename_gen, cc_out);
 
-    it->second.result = new LibraryBuildResult; 
+    it->second.result = res;
     break;
   } case Decl::Kind::OldLoweringSpec: {
     auto* decl = reinterpret_cast<OldLoweringSpecDecl*>(decl_);
@@ -477,6 +489,8 @@ int main(int argc, char **argv) {
   Run({"/bin/mkdir", "-p", ".generated/gen/rules/"});
   Run({"/bin/mkdir", "-p", ".build/objects/src/parser/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/parser/"});
+  Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/parser/"});
+  Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/rules/"});
   rule_set.GetFile(argv[1])->Link(argv[2]);
   // TODO: Remove this at some point (These are for linker errors).
   if (argv[2] == string_view("rules-dynamic")) {

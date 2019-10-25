@@ -2,6 +2,7 @@ old_parser lowering_spec {
   parser = "lowering_spec-parser";
   tokens = "lowering_spec-tokenizer";
   cc_out = "lowering_spec.cc";
+  h_out = "lowering_spec.h";
 }
 
 old_lowering_spec emit_lowering_spec {
@@ -25,12 +26,14 @@ old_parser parser_spec {
   parser = "parser_spec-parser";
   tokens = "parser_spec-tokenizer";
   cc_out = "parser-spec.cc";
+  h_out = "parser-spec.h";
 }
 
 old_parser tokenizer_spec {
   parser = "tokenizer_spec-parser";
   tokens = "tokenizer_spec-tokenizer";
   cc_out = "tokenizer-spec.cc";
+  h_out = "tokenizer-spec.h";
 }
 
 old_lowering_spec lower_to_nfa {

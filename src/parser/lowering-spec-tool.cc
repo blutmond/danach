@@ -1,6 +1,6 @@
 #include <assert.h>
 #include "parser/tokenizer_helper.cc"
-#include "gen/parser/lowering_spec.cc"
+#include "gen/parser/lowering_spec.h"
 
 #include <unordered_set>
 #include <unordered_map>
