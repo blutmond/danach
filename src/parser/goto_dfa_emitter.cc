@@ -1,3 +1,8 @@
+#include "parser/tokens-passes.h"
+#include "gen/parser/parser-spec.h"
+#include "gen/parser/tokenizer-spec.h"
+#include <unordered_set>
+#include <unordered_map>
 #include <memory>
 
 namespace parser_spec {
@@ -265,5 +270,23 @@ struct TokenizerModuleIndex {
     it->second->Emit(stream, is_header);
   }
 };
+
+TokenizerPreEmit* FetchTokenizer(Module* m, string_view name) {
+  TokenizerModuleIndex idx(m);
+  auto it = idx.tokenizers.find(name);
+  if (it == idx.tokenizers.end()) {
+    std::cerr << "No such tokenizer: " << name << "\n";
+    exit(-1);
+  }
+  auto* result = new TokenizerPreEmit;
+  result->decl = it->second->decl;
+  result->all_tokens = it->second->all_tokens;
+  return result;
+}
+
+void EmitTokenizer(TokenizerPreEmit* tokens, std::ostream& stream, bool is_header) {
+  TokenizerIndex idx(tokens->decl);
+  idx.Emit(stream, is_header);
+}
 
 }  // namespace parser_spec

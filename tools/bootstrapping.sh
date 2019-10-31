@@ -18,8 +18,10 @@
 /bin/mkdir -p .build/objects/.generated/gen/rules/
 /usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/.generated/gen/parser/parser-spec.d -MD -c .generated/gen/parser/parser-spec.cc -o .build/objects/.generated/gen/parser/parser-spec.o
 /usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/.generated/gen/parser/tokenizer-spec.d -MD -c .generated/gen/parser/tokenizer-spec.cc -o .build/objects/.generated/gen/parser/tokenizer-spec.o
+/usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/src/parser/regex_nfa_to_dfa.d -MD -c src/parser/regex_nfa_to_dfa.cc -o .build/objects/src/parser/regex_nfa_to_dfa.o
+/usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/src/parser/goto_dfa_emitter.d -MD -c src/parser/goto_dfa_emitter.cc -o .build/objects/src/parser/goto_dfa_emitter.o
 /usr/bin/ccache /usr/bin/clang-6.0 -Wall -std=c++17 -I .generated/ -I src -I .build/ -MF .build/objects/src/parser/tool.d -MD -c src/parser/tool.cc -o .build/objects/src/parser/tool.o
-/usr/bin/clang-6.0 -Wall .build/objects/src/parser/tool.o .build/objects/.generated/gen/parser/tokenizer-spec.o .build/objects/.generated/gen/parser/parser-spec.o -lstdc++ -o .build/parser-dynamic
+/usr/bin/clang-6.0 -Wall .build/objects/src/parser/tool.o .build/objects/src/parser/regex_nfa_to_dfa.o .build/objects/src/parser/goto_dfa_emitter.o .build/objects/.generated/gen/parser/tokenizer-spec.o .build/objects/.generated/gen/parser/parser-spec.o -lstdc++ -o .build/parser-dynamic
 /bin/mv .build/parser-dynamic .build/parser
 /bin/mkdir -p .build/objects/src/rules/
 /bin/mkdir -p .generated/gen/rules/

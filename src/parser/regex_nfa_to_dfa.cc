@@ -1,3 +1,7 @@
+#include "gen/parser/tokenizer-spec.h"
+#include "parser/tokens-passes.h"
+#include <unordered_map>
+
 namespace parser_spec {
 
 std::string Unescaped(string_view data) {
@@ -172,6 +176,10 @@ struct LoweringToNFA {
     return result;
   }
 };
+
+Module* LowerToNFA(Module* m) {
+  return LoweringToNFA().visit(m);
+}
 
 }  // namespace parser_spec
 

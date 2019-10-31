@@ -131,23 +131,25 @@ void BuildLinkCommand(LinkCommand* cmd) {
 }
 
 LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>& deps,
-                                         string_view folder, string_view cxx_name) {
-  std::vector<const char*> eval = {"/usr/bin/ccache", "/usr/bin/clang-6.0", "-Wall", "-std=c++17"};
-  CollectCXXFlags(postorder(deps), &eval);
-  std::string base = std::string(RemoveExt(cxx_name));
-  const char* object_filename = strdup((".build/objects/" + std::string(folder) + "/"
-                                        + base + ".o"));
-  eval.push_back("-MF");
-  eval.push_back(strdup((".build/objects/" + std::string(folder) + "/"
-                                        + base + ".d")));
-  eval.push_back("-MD");
-  eval.push_back("-c");
-  eval.push_back(strdup(std::string(folder) + "/" + std::string(cxx_name)));
-  eval.push_back("-o");
-  eval.push_back(object_filename);
-  Run(std::move(eval));
+                                         string_view folder, std::vector<string_view> srcs) {
   auto* res = new LibraryBuildResult;
-  res->object_files = {object_filename};
+  for (string_view cxx_name : srcs) {
+    std::vector<const char*> eval = {"/usr/bin/ccache", "/usr/bin/clang-6.0", "-Wall", "-std=c++17"};
+    CollectCXXFlags(postorder(deps), &eval);
+    std::string base = std::string(RemoveExt(cxx_name));
+    const char* object_filename = strdup((".build/objects/" + std::string(folder) + "/"
+                                          + base + ".o"));
+    eval.push_back("-MF");
+    eval.push_back(strdup((".build/objects/" + std::string(folder) + "/"
+                           + base + ".d")));
+    eval.push_back("-MD");
+    eval.push_back("-c");
+    eval.push_back(strdup(std::string(folder) + "/" + std::string(cxx_name)));
+    eval.push_back("-o");
+    eval.push_back(object_filename);
+    Run(std::move(eval));
+    res->object_files.push_back(object_filename);
+  }
   res->deps = deps;
   return res;
 }
@@ -163,7 +165,7 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
   if (h_outname) {
     std::vector<const char*> eval = {".build/parser", parser, tokenizer, "header"};
     RunWithPipe(std::move(eval), h_outname);
-    return SimpleCompileCXXFile(deps, folder, cxx_name); 
+    return SimpleCompileCXXFile(deps, folder, {cxx_name}); 
   }
   auto* res = new LibraryBuildResult;
   res->deps = deps;
@@ -399,14 +401,13 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
     auto options = IndexOptionSet(filename, rule_name, decl->options, {"deps", "srcs", "hdrs"});
     auto srcs = StringArgList(options["srcs"]);
     StringArgList(options["hdrs"]);
-    if (srcs.size() != 1) {
-      std::cerr << "Must have 1 and only 1 srcs: \"" << rule_name << "\"\n";
-      exit(EXIT_FAILURE);
+    std::vector<string_view> srcs_copy;
+    for (auto& src : srcs) {
+      srcs_copy.push_back(src);
     }
-    assert(srcs.size() == 1 && "Can only currently handle one src per library.");
     auto deps = ProcessLibraryBuildResultList(options["deps"]);
     deps.push_back(parent->default_flags);
-    it->second.result = SimpleCompileCXXFile(deps, filename, srcs[0]); 
+    it->second.result = SimpleCompileCXXFile(deps, filename, srcs_copy); 
     break;
   }
   default:

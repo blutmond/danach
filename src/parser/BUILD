@@ -1,6 +1,6 @@
 old_parser lowering_spec {
-  parser = "lowering_spec-parser";
-  tokens = "lowering_spec-tokenizer";
+  parser = "syntax/lowering_spec-parser";
+  tokens = "syntax/lowering_spec-tokenizer";
   cc_out = "lowering_spec.cc";
   h_out = "lowering_spec.h";
 }
@@ -23,17 +23,22 @@ link "lowering-spec-tool-dynamic" {
 
 
 old_parser parser_spec {
-  parser = "parser_spec-parser";
-  tokens = "parser_spec-tokenizer";
+  parser = "syntax/parser_spec-parser";
+  tokens = "syntax/parser_spec-tokenizer";
   cc_out = "parser-spec.cc";
   h_out = "parser-spec.h";
 }
 
 old_parser tokenizer_spec {
-  parser = "tokenizer_spec-parser";
-  tokens = "tokenizer_spec-tokenizer";
+  parser = "syntax/tokenizer_spec-parser";
+  tokens = "syntax/tokenizer_spec-tokenizer";
   cc_out = "tokenizer-spec.cc";
   h_out = "tokenizer-spec.h";
+}
+
+lib regex_passes {
+  srcs = ["regex_nfa_to_dfa.cc", "goto_dfa_emitter.cc"];
+  deps = [tokenizer_spec, lower_to_nfa, lower_nfa_to_dfa];
 }
 
 old_lowering_spec lower_to_nfa {
@@ -51,11 +56,23 @@ old_lowering_spec lower_parser_to_functions {
 lib tool {
   srcs = ["tool.cc"];
   deps = [
-    parser_spec, tokenizer_spec, lower_to_nfa, lower_nfa_to_dfa,
-    lower_parser_to_functions
+    parser_spec, tokenizer_spec,
+    lower_parser_to_functions, regex_passes
   ];
 }
 
 link "parser-dynamic" {
   deps = [tool];
+}
+
+lib dbg_tool {
+  srcs = ["tool-debug.cc"];
+  deps = [
+    parser_spec, tokenizer_spec, lower_to_nfa, lower_nfa_to_dfa,
+    lower_parser_to_functions
+  ];
+}
+
+link "dbg-parser" {
+  deps = [dbg_tool];
 }

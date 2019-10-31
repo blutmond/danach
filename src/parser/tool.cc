@@ -1,4 +1,5 @@
 #include "gen/parser/parser-spec.h"
+#include "parser/tokens-passes.h"
 #include "gen/parser/tokenizer-spec.h"
 #include <assert.h>
 // Most of this file can and should be folded back in as
@@ -10,8 +11,6 @@
 #include <memory>
 #include <map>
 #include <set>
-#include "parser/regex_nfa_to_dfa.cc"
-#include "parser/goto_dfa_emitter.cc"
 namespace production_spec {
 
 PatternExpr* getValue(PatternStmt* s);
@@ -832,13 +831,13 @@ int main(int argc, char **argv){
 
   auto* ctx = new production_spec::ModuleContext;
   {
-    m2 = parser_spec::LoweringToNFA().visit(m2);
-    parser_spec::TokenizerModuleIndex idx(m2);
-    ctx->all_tokens = idx.getTokenSet(getTokenizerName(m));
+    m2 = parser_spec::LowerToNFA(m2);
+    auto* tokens = parser_spec::FetchTokenizer(m2, getTokenizerName(m));
+    ctx->all_tokens = tokens->all_tokens;
     auto& stream = std::cout;
     if (true) {
       stream << "namespace " << m->mod_name.str << " {\n";
-      idx.EmitTokenizer("basic", stream, is_header);
+      EmitTokenizer(tokens, stream, is_header);
       stream << "}  // namespace " << m->mod_name.str << "\n";
     }
   }
