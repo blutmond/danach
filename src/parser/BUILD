@@ -1,3 +1,6 @@
+import "src/parser/types" as types;
+import "src/parser/patterns" as patterns;
+
 old_parser lowering_spec {
   parser = "syntax/lowering_spec-parser";
   tokens = "syntax/lowering_spec-tokenizer";
@@ -36,6 +39,10 @@ old_parser tokenizer_spec {
   h_out = "tokenizer-spec.h";
 }
 
+lib tokenizer_helper {
+  srcs = ["tokenizer_helper.cc"];
+}
+
 lib regex_passes {
   srcs = ["regex_nfa_to_dfa.cc", "goto_dfa_emitter.cc"];
   deps = [tokenizer_spec, lower_to_nfa, lower_nfa_to_dfa];
@@ -56,8 +63,11 @@ old_lowering_spec lower_parser_to_functions {
 lib tool {
   srcs = ["tool.cc"];
   deps = [
-    parser_spec, tokenizer_spec,
-    lower_parser_to_functions, regex_passes
+    parser_spec, tokenizer_spec, types.emit_type_decls,
+    patterns.emit_parser,
+    patterns.type_check,
+    patterns.lower_and_merge,
+    lower_parser_to_functions, regex_passes, tokenizer_helper
   ];
 }
 

@@ -490,8 +490,12 @@ int main(int argc, char **argv) {
   Run({"/bin/mkdir", "-p", ".generated/gen/rules/"});
   Run({"/bin/mkdir", "-p", ".build/objects/src/parser/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/parser/"});
+  Run({"/bin/mkdir", "-p", ".generated/gen/parser/types/"});
+  Run({"/bin/mkdir", "-p", ".generated/gen/parser/patterns/"});
   Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/parser/"});
   Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/rules/"});
+  Run({"/bin/mkdir", "-p", ".build/objects/src/parser/types"});
+  Run({"/bin/mkdir", "-p", ".build/objects/src/parser/patterns"});
   rule_set.GetFile(argv[1])->Link(argv[2]);
   // TODO: Remove this at some point (These are for linker errors).
   if (argv[2] == string_view("rules-dynamic")) {
