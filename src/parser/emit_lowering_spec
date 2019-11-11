@@ -1,6 +1,8 @@
 module lowering_spec;
 
-func EmitType(t: TypeRef) -> unit {
+context stream: Stream;
+
+func EmitType(stream: Stream, t: TypeRef) -> unit {
   open t: TypeRef {
   case .Void: emit { "void"; }
   case .Member: EmitType(t->base); emit { "::"; t->name.str; }
@@ -9,7 +11,7 @@ func EmitType(t: TypeRef) -> unit {
   }
 }
 
-func EmitTypeSignature(t: TypeRef) -> unit {
+func EmitTypeSignature(stream: Stream, t: TypeRef) -> unit {
   open t: TypeRef {
   case .Void: emit { "void"; }
   case .Template:
@@ -30,6 +32,7 @@ func EmitTypeSignature(t: TypeRef) -> unit {
     if (t->name.str == "Array") { emit { "std::vector"; } return; }
     if (t->name.str == "Map") { emit { "std::map"; } return; }
     if (t->name.str == "String") { emit { "string_view"; } return; }
+    if (t->name.str == "Stream") { emit { "std::ostream&"; } return; }
     if (t->name.str == "char") { emit { "char"; } return; }
     if (t->name.str == "int") { emit { "int"; } return; }
     if (t->name.str == "bool") { emit { "bool"; } return; }
@@ -37,7 +40,7 @@ func EmitTypeSignature(t: TypeRef) -> unit {
   }
 }
 
-func EmitExpr(ctx: ContextFinderContext, expr: Expr) -> unit {
+func EmitExpr(stream: Stream, ctx: ContextFinderContext, expr: Expr) -> unit {
   open expr : Expr {
   case .New:
     emit { "({\nauto* self = new "; }
@@ -136,7 +139,7 @@ func EmitExpr(ctx: ContextFinderContext, expr: Expr) -> unit {
   }
 }
 
-func EmitStmt(ctx: ContextFinderContext, stmt: Stmt) -> unit {
+func EmitStmt(stream: Stream, ctx: ContextFinderContext, stmt: Stmt) -> unit {
   open stmt: Stmt {
   case .Compound:
     for cstmt in stmt->stmts { EmitStmt(ctx, cstmt); }
@@ -208,7 +211,8 @@ func EmitStmt(ctx: ContextFinderContext, stmt: Stmt) -> unit {
   case .Emitter:
     for cstmt in AsCompound(stmt->body)->stmts { open cstmt : Stmt {
       case .Discard:
-        emit { "std::cout << ("; }
+        emit { ctx->GetStdoutContext(); }
+        emit { " << ("; }
         EmitExpr(ctx, cstmt->expr);
         emit { ");\n"; }
       default:
@@ -265,7 +269,7 @@ func EmitStmt(ctx: ContextFinderContext, stmt: Stmt) -> unit {
   }
 }
 
-func EmitFuncDeclHeader(decl: FuncDecl) -> unit {
+func EmitFuncDeclHeader(stream: Stream, decl: FuncDecl) -> unit {
   EmitTypeSignature(decl->ret_t);
   emit { " "; decl->name.str; "("; }
   var i : int;
@@ -278,14 +282,14 @@ func EmitFuncDeclHeader(decl: FuncDecl) -> unit {
   emit { ")"; }
 }
 
-func EmitFuncDecl(ctx: ContextFinderContext, decl: FuncDecl) -> unit {
+func EmitFuncDecl(stream: Stream, ctx: ContextFinderContext, decl: FuncDecl) -> unit {
   EmitFuncDeclHeader(decl);
   emit { " {\n"; }
   EmitStmt(ctx, decl->body);
   emit { "}\n"; }
 }
 
-func Emit(m: Module) -> unit {
+func Emit(stream: Stream, m: Module) -> unit {
   emit { "namespace "; m->mod_name.str; " {\n\n"; }
   let ctx = new ContextFinderContext {};
 

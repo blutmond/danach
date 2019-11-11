@@ -9,6 +9,8 @@
 
 namespace lowering_spec {
 
+std::ostream &GetStream(std::ostream & o) { return std::cout; }// return std::cout; }
+
 class ContextFinderContext {
  public:
 
@@ -46,6 +48,13 @@ class ContextFinderContext {
     return it->second;
   }
 
+  std::string GetStdoutContext() {
+    if (isContextUsage("stream")) {
+      return "GetStream(stream)";
+    }
+    return "std::cout";
+  }
+
   void HardSetContext(FuncDecl* decl, ContextDecl* ctx) {
     edges[decl].contexts.push_back(ctx);
   }
@@ -81,5 +90,5 @@ int main(int argc, char **argv){
   lowering_spec::Tokenizer tokens(contents.c_str());
   auto* m = lowering_spec::parser::DoParse(tokens);
 
-  lowering_spec::Emit(m);
+  lowering_spec::Emit(std::cout, m);
 }
