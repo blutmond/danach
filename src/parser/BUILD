@@ -44,16 +44,16 @@ lib tokenizer_helper {
 }
 
 lib regex_passes {
-  srcs = ["regex_nfa_to_dfa.cc", "goto_dfa_emitter.cc"];
+  srcs = ["tokens/regex_nfa_to_dfa.cc", "tokens/goto_dfa_emitter.cc"];
   deps = [tokenizer_spec, lower_to_nfa, lower_nfa_to_dfa];
 }
 
 old_lowering_spec lower_to_nfa {
-  src = "lower_to_nfa"; cc_out = "lower_to_nfa.cc";
+  src = "tokens/lower_to_nfa"; cc_out = "lower_to_nfa.cc";
 }
 
 old_lowering_spec lower_nfa_to_dfa {
-  src = "lower_nfa_to_dfa"; cc_out = "lower_nfa_to_dfa.cc";
+  src = "tokens/lower_nfa_to_dfa"; cc_out = "lower_nfa_to_dfa.cc";
 }
 
 old_lowering_spec lower_parser_to_functions {

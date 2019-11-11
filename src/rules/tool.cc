@@ -487,7 +487,10 @@ int main(int argc, char **argv) {
 
   RuleSet rule_set;
   Run({"/bin/mkdir", "-p", ".build/objects/src/rules/"});
+  Run({"/bin/mkdir", "-p", ".build/objects/src/data/"});
+  Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/data/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/rules/"});
+  Run({"/bin/mkdir", "-p", ".generated/gen/data/"});
   Run({"/bin/mkdir", "-p", ".build/objects/src/parser/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/parser/"});
   Run({"/bin/mkdir", "-p", ".generated/gen/parser/types/"});
