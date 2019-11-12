@@ -14,7 +14,10 @@ lib process {
 
 lib tool {
   srcs = ["tool.cc"];
-  deps = [rule_spec, process, parser.lowering_spec_lowering, parser.tokenizer_helper];
+  deps = [rule_spec, process,
+          parser.parser_lowering,
+          parser.lowering_spec_lowering,
+          parser.tokenizer_helper];
 }
 
 link "rules-dynamic" { deps = [tool]; }

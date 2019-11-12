@@ -1,9 +1,5 @@
 module production_spec;
 
-func productionName(d: DefineWithTypeDecl) -> unit {
-  emit { "_production_"; d->name.str; }
-}
-
 func getValue(s: PatternStmt) -> PatternExpr {
   open s: PatternStmt {
   case .Assign: return s->value;

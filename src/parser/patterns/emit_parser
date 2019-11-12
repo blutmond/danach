@@ -4,6 +4,10 @@ context emit_ctx: EmitContext;
 
 context stream: Stream;
 
+func productionName(stream: Stream, d: DefineWithTypeDecl) -> unit {
+  emit { "_production_"; d->name.str; }
+}
+
 func emitSanitizedPatternExpr(stream: Stream, emit_ctx: EmitContext, expr: PatternExpr) -> unit {
   open expr: PatternExpr {
   case .New:

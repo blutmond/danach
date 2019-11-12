@@ -10,6 +10,7 @@
 #include <algorithm>
 #include "gen/rules/rule-spec.h"
 #include "parser/lowering_spec_lowering.h"
+#include "parser/parser_lowering.h"
 
 std::string Unescaped(string_view data) {
   std::string out;
@@ -161,6 +162,44 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
                                        const char* parser, const char* tokenizer,
                                        const char* outname, const char* h_outname,
                                        string_view folder, string_view cxx_name) {
+  auto contents = LoadFile(parser);
+  auto contents_tok = LoadFile(tokenizer);
+
+  production_spec::Tokenizer tokens(contents.c_str());
+  auto* m = production_spec::parser::DoParse(tokens);
+
+  parser_spec::Tokenizer tokens_tok(contents_tok.c_str());
+  auto* m2 = parser_spec::parser::DoParse(tokens_tok);
+
+  auto* ctx = parser::DoAnalysis(m, m2);
+  
+  // Actual Emit...
+  {
+    std::string output;
+    std::stringstream stream(output);
+    parser::EmitParser(stream, m, m2, ctx, /* is_header= */ false);
+
+    std::ofstream ofs(outname, std::ofstream::out | std::ofstream::trunc);
+    ofs << stream.str();
+    ofs.close();
+  }
+  
+  if (h_outname) {
+    std::string output;
+    std::stringstream stream(output);
+    parser::EmitParser(stream, m, m2, ctx, /* is_header= */ true);
+
+    std::ofstream ofs(h_outname, std::ofstream::out | std::ofstream::trunc);
+    ofs << stream.str();
+    ofs.close();
+  }
+
+  if (h_outname) {
+    return SimpleCompileCXXFile(deps, folder, {cxx_name}); 
+  }
+
+  /*
+
   {
     std::vector<const char*> eval = {".build/parser", parser, tokenizer};
     RunWithPipe(std::move(eval), outname);
@@ -170,6 +209,7 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
     RunWithPipe(std::move(eval), h_outname);
     return SimpleCompileCXXFile(deps, folder, {cxx_name}); 
   }
+  */
   auto* res = new LibraryBuildResult;
   res->deps = deps;
   return res;
@@ -187,7 +227,6 @@ LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResul
   stream.flush();
 
   std::ofstream ofs(outname, std::ofstream::out | std::ofstream::trunc);
-
   ofs << stream.str();
   ofs.close();
 

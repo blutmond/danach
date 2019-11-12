@@ -1,11 +1,16 @@
 namespace production_spec {
 
+void productionName(std::ostream& stream, DefineWithTypeDecl* d);
 void emitSanitizedPatternExpr(std::ostream& stream, EmitContext* emit_ctx, PatternExpr* expr);
 void emitResultIfPresent(std::ostream& stream, EmitContext* emit_ctx);
 void emitConditionalArg(std::ostream& stream, EmitContext* emit_ctx, PatternExpr* expr);
 void emitSanitizedPatternStmt(std::ostream& stream, EmitContext* emit_ctx, PatternStmt* s);
 void emitBasics(std::ostream& stream, ModuleContext* globals, Module* m, bool is_header);
 
+void productionName(std::ostream& stream, DefineWithTypeDecl* d) {
+stream << ("_production_");
+stream << (d->name.str);
+}
 void emitSanitizedPatternExpr(std::ostream& stream, EmitContext* emit_ctx, PatternExpr* expr) {
 {
 auto __tmp_switch_name = expr;
@@ -337,7 +342,7 @@ auto* decl = reinterpret_cast<DefineWithTypeDecl*>(__tmp_switch_name);
 (void)decl;
 emitTypeExpr(stream, decl->type);
 stream << (" ");
-productionName(decl);
+productionName(stream, decl);
 stream << ("(Tokenizer& tokens);\n");
 break;
 } case Decl::Kind::Entry: {
@@ -370,7 +375,7 @@ auto __tmp__emit_ctx = EmitContext::makeRoot(globals);
 auto emit_ctx = std::move(__tmp__emit_ctx);
 emitTypeExpr(stream, decl->type);
 stream << (" ");
-productionName(decl);
+productionName(stream, decl);
 stream << ("(Tokenizer& tokens) {\n");
 emitSanitizedPatternStmt(stream, emit_ctx, decl->value);
 emitResultIfPresent(stream, emit_ctx);

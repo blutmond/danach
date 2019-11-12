@@ -1,6 +1,5 @@
 namespace production_spec {
 
-void productionName(DefineWithTypeDecl* d);
 PatternExpr* getValue(PatternStmt* s);
 PatternStmt* findSuccessorForExpr(PatternExpr* expr, PatternStmt* stmt);
 PatternStmt* findSuccessor(PatternStmt* s);
@@ -8,10 +7,6 @@ PatternStmt* makeTryStmtFromPattern(PatternDecl* subdecl, TypeDeclExpr* base_typ
 Decl* lowerProductionToMergeDecl(Module* m, ModuleContext* globals, Decl* d);
 Module* lowerProductionToMerge(ModuleContext* globals, Module* m);
 
-void productionName(DefineWithTypeDecl* d) {
-std::cout << ("_production_");
-std::cout << (d->name.str);
-}
 PatternExpr* getValue(PatternStmt* s) {
 {
 auto __tmp_switch_name = s;
