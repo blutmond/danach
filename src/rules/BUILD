@@ -1,4 +1,4 @@
-import "src/new_parser" as parser;
+import "src/parser" as parser;
 
 old_parser rule_spec {
   parser = "rule_spec-parser";
@@ -14,7 +14,7 @@ lib process {
 
 lib tool {
   srcs = ["tool.cc"];
-  deps = [rule_spec, process];
+  deps = [rule_spec, process, parser.lowering_spec_lowering, parser.tokenizer_helper];
 }
 
 link "rules-dynamic" { deps = [tool]; }

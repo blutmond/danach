@@ -13,9 +13,15 @@ old_lowering_spec emit_lowering_spec {
   cc_out = "emit_lowering_spec.cc";
 }
 
+lib lowering_spec_lowering {
+  srcs = ["lowering_spec_lowering.cc"];
+  hdrs = ["lowering_spec_lowering.h"];
+  deps = [lowering_spec, emit_lowering_spec, tokenizer_helper];
+}
+
 lib lowering_spec_tool {
   srcs = ["lowering-spec-tool.cc"];
-  deps = [lowering_spec, emit_lowering_spec];
+  deps = [lowering_spec_lowering];
 }
 
 link "lowering-spec-tool-dynamic" {

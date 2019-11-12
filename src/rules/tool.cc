@@ -4,9 +4,12 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <deque>
+#include <sstream>
+#include <fstream>
 #include <assert.h>
 #include <algorithm>
-#include "parser/tokenizer_helper.cc"
+#include "gen/rules/rule-spec.h"
+#include "parser/lowering_spec_lowering.h"
 
 std::string Unescaped(string_view data) {
   std::string out;
@@ -174,8 +177,20 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
 
 LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResult*>& deps,
                                              const char* lowering_spec, const char* outname) {
-  std::vector<const char*> eval = {".build/lowering-spec-tool", lowering_spec};
-  RunWithPipe(std::move(eval), outname);
+  auto contents = LoadFile(lowering_spec);
+  lowering_spec::Tokenizer tokens(contents.c_str());
+  auto* m = lowering_spec::parser::DoParse(tokens);
+
+  std::string output;
+  std::stringstream stream(output);
+  lowering_spec::Emit(stream, m);
+  stream.flush();
+
+  std::ofstream ofs(outname, std::ofstream::out | std::ofstream::trunc);
+
+  ofs << stream.str();
+  ofs.close();
+
   auto* res = new LibraryBuildResult;
   res->deps = deps;
   return res;
@@ -189,7 +204,6 @@ LibraryBuildResult *MakeDefaultFlags() {
   return res;
 }
 
-#include "gen/rules/rule-spec.h"
 
 std::unordered_map<string_view, rule_spec::Option*> IndexOptionSet(
     string_view filename,
@@ -486,6 +500,7 @@ int main(int argc, char **argv) {
   }
 
   RuleSet rule_set;
+  // TODO: This is getting out of hand...
   Run({"/bin/mkdir", "-p", ".build/objects/src/rules/"});
   Run({"/bin/mkdir", "-p", ".build/objects/src/data/"});
   Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/data/"});
