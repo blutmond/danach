@@ -2,12 +2,14 @@ module production_spec;
 
 context emit_ctx: EmitContext;
 
-func emitSanitizedPatternExpr(emit_ctx: EmitContext, expr: PatternExpr) -> unit {
+context stream: Stream;
+
+func emitSanitizedPatternExpr(stream: Stream, emit_ctx: EmitContext, expr: PatternExpr) -> unit {
   open expr: PatternExpr {
   case .New:
     emit { "({\n"; }
     emit { "auto __current_self = "; }
-    emitNewType(expr->type);
+    emitNewType(stream, expr->type);
     emit { ";"; }
     emitSanitizedPatternStmt(expr->value);
     emit {
@@ -26,7 +28,7 @@ func emitSanitizedPatternExpr(emit_ctx: EmitContext, expr: PatternExpr) -> unit 
     let emit_ctx = emit_ctx->ConcatContext();
     let type = emit_ctx->TypeCheck(expr->element);
     emit { "([&]{\n"; "std::vector<"; }
-    emitTypeExpr(type);
+    emitTypeExpr(stream, type);
     emit { "> __current_vector__;\n"; }
     let succ = emit_ctx->GetSuccessor(expr);
     if (succ) {
@@ -53,7 +55,7 @@ func emitSanitizedPatternExpr(emit_ctx: EmitContext, expr: PatternExpr) -> unit 
     let emit_ctx = emit_ctx->ConcatContext();
     let type = emit_ctx->TypeCheck(expr->element);
     emit { "([&]{\n"; "std::vector<"; }
-    emitTypeExpr(type);
+    emitTypeExpr(stream, type);
     emit { "> __current_vector__;\n"; }
     emit { "    while (true) {\n"; }
     let succ = emit_ctx->GetSuccessor(expr);
@@ -78,7 +80,7 @@ func emitSanitizedPatternExpr(emit_ctx: EmitContext, expr: PatternExpr) -> unit 
   }
 }
 
-func emitResultIfPresent(emit_ctx: EmitContext) -> unit {
+func emitResultIfPresent(stream: Stream, emit_ctx: EmitContext) -> unit {
   if (emit_ctx->has_result) {
     if (emit_ctx->is_inside_expr) {
       emit { "expr_result = result;\ncontinue;\n"; }
@@ -90,7 +92,7 @@ func emitResultIfPresent(emit_ctx: EmitContext) -> unit {
   }
 }
 
-func emitConditionalArg(emit_ctx: EmitContext, expr: PatternExpr) -> unit {
+func emitConditionalArg(stream: Stream, emit_ctx: EmitContext, expr: PatternExpr) -> unit {
   open expr: PatternExpr {
   case .Named:
     if (emit_ctx->globals->isToken(expr->name.str)) {
@@ -104,7 +106,7 @@ func emitConditionalArg(emit_ctx: EmitContext, expr: PatternExpr) -> unit {
 }
 
 
-func emitSanitizedPatternStmt(emit_ctx: EmitContext, s: PatternStmt) -> unit {
+func emitSanitizedPatternStmt(stream: Stream, emit_ctx: EmitContext, s: PatternStmt) -> unit {
   open s: PatternStmt {
   case .String:
     emit { "tokens.expect("; s->value.str; ");\n"; }
@@ -155,7 +157,7 @@ func emitSanitizedPatternStmt(emit_ctx: EmitContext, s: PatternStmt) -> unit {
     error(s, " merge is not supported");
   case .ExprTailLoop:
     let emit_ctx = emit_ctx->NewExprTailLoopContext();
-    emitTypeExpr(s->type);
+    emitTypeExpr(stream, s->type);
     emit { " expr_result = "; }
     emitSanitizedPatternExpr(s->base);
     emit { ";\n"; }
@@ -168,19 +170,19 @@ func emitSanitizedPatternStmt(emit_ctx: EmitContext, s: PatternStmt) -> unit {
   }
 }
 
-func emitBasics(globals: ModuleContext, m: Module, is_header: bool) -> unit {
+func emitBasics(stream: Stream, globals: ModuleContext, m: Module, is_header: bool) -> unit {
   emit { "namespace "; m->mod_name.str; "{\n"; }
   emit { "namespace parser {\n"; }
   for decl in m->decls {
     open decl : Decl {
     case .DefineWithType:
-      emitTypeExpr(decl->type);
+      emitTypeExpr(stream, decl->type);
       emit { " "; }
       productionName(decl);
       emit { "(Tokenizer& tokens);\n"; }
     case .Entry:
       let entry_type = new NamedTypeDeclExpr { self->name = decl->name; };
-      emitTypeExpr(entry_type);
+      emitTypeExpr(stream, entry_type);
       emit { " DoParse(Tokenizer& tokens);\n"; }
     default:
     }
@@ -192,7 +194,7 @@ if (is_header) {
     open decl : Decl {
     case .DefineWithType:
       let emit_ctx = EmitContext::makeRoot(globals);
-      emitTypeExpr(decl->type);
+      emitTypeExpr(stream, decl->type);
       emit { " "; }
       productionName(decl);
       emit { "(Tokenizer& tokens) {\n"; }
@@ -201,7 +203,7 @@ if (is_header) {
       emit { "}\n"; }
     case .Entry:
       let entry_type = new NamedTypeDeclExpr { self->name = decl->name; };
-      emitTypeExpr(entry_type);
+      emitTypeExpr(stream, entry_type);
       emit { " DoParse(Tokenizer& tokens) {\n"; }
       emit { "  return _production_"; decl->name.str; "(tokens);\n"; }
       emit { "}\n"; }

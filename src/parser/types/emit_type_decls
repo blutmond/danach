@@ -1,6 +1,8 @@
 module production_spec;
 
-func emitNewType(t: TypeDeclExpr) -> unit {
+context stream: Stream;
+
+func emitNewType(stream: Stream, t: TypeDeclExpr) -> unit {
   open t : TypeDeclExpr {
   case .Named:
     if (t->name.str == "Token") { error("Cannot new: ", t); return; }
@@ -24,7 +26,7 @@ func emitNewType(t: TypeDeclExpr) -> unit {
   }
 }
 
-func emitTypeExpr(t: TypeDeclExpr) -> unit {
+func emitTypeExpr(stream: Stream, t: TypeDeclExpr) -> unit {
   open t : TypeDeclExpr {
   case .Parametric:
     emitTypeExpr(t->base);
@@ -58,7 +60,7 @@ func emitTypeExpr(t: TypeDeclExpr) -> unit {
   }
 }
 
-func emitStructBody(t: ProductTypeDeclExpr) -> unit {
+func emitStructBody(stream: Stream, t: ProductTypeDeclExpr) -> unit {
   for subdecl in t->decls {
     emit { "  "; }
     emitTypeExpr(subdecl->type);
@@ -66,7 +68,7 @@ func emitStructBody(t: ProductTypeDeclExpr) -> unit {
   }
 }
 
-func ImplicitDumpTypes(m: Module) -> unit {
+func ImplicitDumpTypes(stream: Stream, m: Module) -> unit {
   emit { "namespace "; m->mod_name.str; "{\n"; }
   for decl in m->decls {
     open decl : Decl {

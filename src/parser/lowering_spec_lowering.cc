@@ -8,9 +8,7 @@
 
 namespace lowering_spec {
 
-std::ostream &GetStream(std::ostream& o) { return o; }// return std::cout; }
-
-class ContextFinderContext {
+  class ContextFinderContext {
  public:
 
   struct State {
@@ -49,7 +47,7 @@ class ContextFinderContext {
 
   std::string GetStdoutContext() {
     if (isContextUsage("stream")) {
-      return "GetStream(stream)";
+      return "stream"; // GetStream(stream)";
     }
     return "std::cout";
   }

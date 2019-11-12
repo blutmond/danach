@@ -66,8 +66,9 @@ old_lowering_spec lower_parser_to_functions {
   src = "lower_parser_to_functions"; cc_out = "lower_parser_to_functions.cc";
 }
 
-lib tool {
-  srcs = ["tool.cc"];
+lib parser_lowering {
+  srcs = ["parser_lowering.cc"];
+  hdrs = ["parser_lowering.h"];
   deps = [
     parser_spec, tokenizer_spec, types.emit_type_decls,
     patterns.emit_parser,
@@ -75,6 +76,11 @@ lib tool {
     patterns.lower_and_merge,
     lower_parser_to_functions, regex_passes, tokenizer_helper
   ];
+}
+
+lib tool {
+  srcs = ["tool.cc"];
+  deps = [parser_lowering];
 }
 
 link "parser-dynamic" {

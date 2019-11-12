@@ -8,6 +8,8 @@
 namespace parser_spec {
 
 struct GotoDFACPPEmitter {
+  explicit GotoDFACPPEmitter(std::ostream& stream): stream(stream) {}
+  std::ostream& stream;
   int id_assign = 0;
   std::vector<std::pair<Node*, int>> work_list;
   std::unordered_map<Node*, int> assigned;
@@ -23,14 +25,14 @@ struct GotoDFACPPEmitter {
   }
   void prettyEmitChar(char c) {
     if (c == '\\') {
-      std::cout << "'\\\\'";
+      stream << "'\\\\'";
       return;
     }
     if (std::isprint(c)) {
-      std::cout << "'" << c << "'";
+      stream << "'" << c << "'";
       return;
     } else {
-      std::cout << (int)c;
+      stream << (int)c;
     }
   }
   void emitRoot(Node* node) {
@@ -40,49 +42,49 @@ struct GotoDFACPPEmitter {
   void emitAll() {
     while (!work_list.empty()) {
       auto* node = work_list.back().first;
-      std::cout << "bb" << work_list.back().second << ":\n";
+      stream << "bb" << work_list.back().second << ":\n";
       work_list.pop_back();
       for (auto* edge: node->edges) {
         switch (edge->getKind()) {
         case Edge::Kind::Range: {
           auto* tmp = reinterpret_cast<RangeEdge*>(edge);
           int id = getId(tmp->next);
-          std::cout << "  if (c >= ";
+          stream << "  if (c >= ";
           prettyEmitChar(tmp->start);
-          std::cout << " && c <= ";
+          stream << " && c <= ";
           prettyEmitChar(tmp->end);
-          std::cout << ") { \n";
-          std::cout << " ++cur; \n";
-          std::cout << "c = *cur; \n";
-          std::cout << " goto bb" << id << "; }\n";
+          stream << ") { \n";
+          stream << " ++cur; \n";
+          stream << "c = *cur; \n";
+          stream << " goto bb" << id << "; }\n";
           break;
         } case Edge::Kind::Unary: {
           auto* tmp = reinterpret_cast<UnaryEdge*>(edge);
           int id = getId(tmp->next);
-          std::cout << "  if (c ==";
+          stream << "  if (c ==";
           prettyEmitChar(tmp->match);
-          std::cout << ") { \n";
+          stream << ") { \n";
           // never advance 0.
           if (tmp->match != 0) {
-            std::cout << " ++cur; \n";
-            std::cout << "c = *cur; \n";
+            stream << " ++cur; \n";
+            stream << "c = *cur; \n";
           }
-          std::cout << " goto bb" << id << "; }\n";
+          stream << " goto bb" << id << "; }\n";
           break;
         } case Edge::Kind::SkipTo:
           fprintf(stderr, "Un-eliminated skip-to\n");
           exit(-1);
           break;
         case Edge::Kind::Emit:
-          std::cout << "  return MakeToken(tok::" <<
+          stream << "  return MakeToken(tok::" <<
               reinterpret_cast<EmitEdge*>(edge)->name.str <<
               ", st, cur);\n";
           break;
         case Edge::Kind::Ignore:
-          std::cout << "  goto start;\n";
+          stream << "  goto start;\n";
           break;
         case Edge::Kind::Unexpected:
-          std::cout << "  unexpected(c);\n";
+          stream << "  unexpected(c);\n";
           break;
         }
       }
@@ -176,7 +178,7 @@ Token GetNext(const char*& cur))"; if (is_header) { stream << ";\n"; } else { st
     goto bb0;
 )";
 
-    GotoDFACPPEmitter().emitRoot(decl->root);
+    GotoDFACPPEmitter(stream).emitRoot(decl->root);
 
     stream << "}\n";
 }

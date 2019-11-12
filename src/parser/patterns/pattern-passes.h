@@ -103,10 +103,10 @@ struct ModuleContext {
   void typeCheckAll();
 };
 
-void emitBasics(ModuleContext* globals, Module* m, bool is_header);
+void emitBasics(std::ostream& stream, ModuleContext* globals, Module* m, bool is_header);
 
 Module* lowerProductionToMerge(ModuleContext* globals, Module* module);
 
-void ImplicitDumpTypes(Module* m);
+void ImplicitDumpTypes(std::ostream& stream, Module* m);
 
 }  // namespace production_spec

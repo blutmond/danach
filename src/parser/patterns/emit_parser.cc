@@ -78,9 +78,8 @@ struct EmitContext {
   bool has_result = false;
 };
 
-void emitNewType(TypeDeclExpr* t);
-void emitTypeExpr(TypeDeclExpr* t);
-void ImplicitDumpTypes(Module* m);
+void emitNewType(std::ostream& stream, TypeDeclExpr* t);
+void emitTypeExpr(std::ostream& stream, TypeDeclExpr* t);
 void productionName(DefineWithTypeDecl* d);
 void DebugPrintExpr(PatternExpr* e);
 
