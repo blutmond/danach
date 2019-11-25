@@ -81,6 +81,7 @@ struct ImportDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
+struct PassesDecl;
 struct LinkDecl;
 struct Expr;
 struct NameExpr;
@@ -92,7 +93,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, OldParser, OldLoweringSpec, Library, Link,
+    Import, OldParser, OldLoweringSpec, Library, Passes, Link,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -120,6 +121,12 @@ struct OldLoweringSpecDecl: public Decl {
 
 struct LibraryDecl: public Decl {
   LibraryDecl() : Decl(Kind::Library) {}
+  tok::Token name;
+  std::vector<Option*> options;
+};
+
+struct PassesDecl: public Decl {
+  PassesDecl() : Decl(Kind::Passes) {}
   tok::Token name;
   std::vector<Option*> options;
 };

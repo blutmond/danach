@@ -11,6 +11,7 @@
 #include "gen/rules/rule-spec.h"
 #include "parser/lowering_spec_lowering.h"
 #include "parser/parser_lowering.h"
+#include "rules/emit-passes.h"
 
 std::string Unescaped(string_view data) {
   std::string out;
@@ -192,24 +193,9 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
     std::ofstream ofs(h_outname, std::ofstream::out | std::ofstream::trunc);
     ofs << stream.str();
     ofs.close();
-  }
-
-  if (h_outname) {
     return SimpleCompileCXXFile(deps, folder, {cxx_name}); 
   }
 
-  /*
-
-  {
-    std::vector<const char*> eval = {".build/parser", parser, tokenizer};
-    RunWithPipe(std::move(eval), outname);
-  }
-  if (h_outname) {
-    std::vector<const char*> eval = {".build/parser", parser, tokenizer, "header"};
-    RunWithPipe(std::move(eval), h_outname);
-    return SimpleCompileCXXFile(deps, folder, {cxx_name}); 
-  }
-  */
   auto* res = new LibraryBuildResult;
   res->deps = deps;
   return res;
@@ -242,7 +228,6 @@ LibraryBuildResult *MakeDefaultFlags() {
   res->cxx_flags = {"-I", ".generated/", "-I", "src", "-I", ".build/"};
   return res;
 }
-
 
 std::unordered_map<string_view, rule_spec::Option*> IndexOptionSet(
     string_view filename,
@@ -285,125 +270,61 @@ std::string GetStringOption(rule_spec::Option* option) {
   return Unescaped(reinterpret_cast<StringLiteralExpr*>(option->value)->value.str);
 }
 
-class RuleSet;
+#include "gen/rules/rules-passes.h"
+namespace rules {
 
-class RuleFile {
- public:
-  RuleSet* parent;
-  std::string filename;
-  rule_spec::Module* module;
-
-  struct LibCache {
-    rule_spec::Decl* decl;
-    // Unused for imports...
-    LibraryBuildResult* result = nullptr;
-    // For cycle detection.
-    bool started = false;
-  };
-
-  struct LinkCache {
-    rule_spec::LinkDecl* decl;
-    bool finished = false;
-    bool started = false;
-  };
-
-  void IndexDecl(rule_spec::Decl* decl_) {
-    using namespace rule_spec;
-    switch (decl_->getKind()) {
-    case Decl::Kind::Import: {
-      auto* decl = reinterpret_cast<ImportDecl*>(decl_);
-      auto key = std::string(decl->name.str);
-      if (libs.find(key) != libs.end()) {
-        fprintf(stderr, "Duplicate rule: %s\n", std::string(decl->name.str).c_str());
-        exit(EXIT_FAILURE);
-      }
-      libs[key].decl = decl;
-      break;
-    } case Decl::Kind::OldParser: {
-      auto* decl = reinterpret_cast<OldParserDecl*>(decl_);
-      auto key = std::string(decl->name.str);
-      if (libs.find(key) != libs.end()) {
-        fprintf(stderr, "Duplicate rule: %s\n", std::string(decl->name.str).c_str());
-        exit(EXIT_FAILURE);
-      }
-      libs[key].decl = decl;
-      break;
-    } case Decl::Kind::OldLoweringSpec: {
-      auto* decl = reinterpret_cast<OldLoweringSpecDecl*>(decl_);
-      auto key = std::string(decl->name.str);
-      if (libs.find(key) != libs.end()) {
-        fprintf(stderr, "Duplicate rule: %s\n", std::string(decl->name.str).c_str());
-        exit(EXIT_FAILURE);
-      }
-      libs[key].decl = decl;
-      break;
-    } case Decl::Kind::Library: {
-      auto* decl = reinterpret_cast<LibraryDecl*>(decl_);
-      auto key = std::string(decl->name.str);
-      if (libs.find(key) != libs.end()) {
-        fprintf(stderr, "Duplicate rule: %s\n", std::string(decl->name.str).c_str());
-        exit(EXIT_FAILURE);
-      }
-      libs[key].decl = decl;
-      break;
-    } case Decl::Kind::Link: {
-      auto* decl = reinterpret_cast<LinkDecl*>(decl_);
-      auto key = Unescaped(decl->fname.str);
-      if (links.find(key) != links.end()) {
-        fprintf(stderr, "Duplicate link rule: %s\n", std::string(decl->fname.str).c_str());
-        exit(EXIT_FAILURE);
-      }
-      links[key].decl = decl;
-      break;
-    }
-    }
-  }
-
-  std::unordered_map<std::string, LibCache> libs;
-  std::unordered_map<std::string, LinkCache> links;
-
-  LibraryBuildResult* GetAndRunRule(string_view rule_name);
-
-  LibraryBuildResult* ProcessLibraryBuildResult(rule_spec::Expr* expr);
-  std::vector<LibraryBuildResult*> ProcessLibraryBuildResultList(rule_spec::Option* option);
-  void Link(string_view rule_name);
-};
-
-class RuleSet {
- public:
-  std::unordered_map<std::string, RuleFile> rule_files;
-
-  RuleFile* GetFile(string_view path) {
-    auto it = rule_files.find(std::string(path));
-    if (it != rule_files.end()) return &it->second;
-    rule_spec::Tokenizer tokens((new std::string{LoadFile(std::string(path) + "/BUILD")})->c_str());
-    auto* result = &rule_files[std::string(path)];
-    result->module = rule_spec::parser::DoParse(tokens);
-    result->parent = this;
-    result->filename = std::string(path);
-    for (auto* decl : result->module->decls) {
-      result->IndexDecl(decl);
-    }
-    return result;
-  }
-  LibraryBuildResult* default_flags = MakeDefaultFlags();
-};
-
-LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
+LibraryBuildResult* ProcessLibraryBuildResult(RuleFile* context, rule_spec::Expr* expr) {
   using namespace rule_spec;
-  auto it = libs.find(std::string(rule_name));
-  if (it == libs.end()) {
-    std::cerr << "No such library: \"" << rule_name << "\"\n";
-    exit(EXIT_FAILURE);
-  }
-  if (it->second.result) return it->second.result;
-  if (it->second.started) {
-    std::cerr << "Cycle detected while building: \"" << rule_name << "\"\n";
-    exit(EXIT_FAILURE);
-  }
-  it->second.started = true;
+  switch (expr->getKind()) {
+  case Expr::Kind::Dot: {
+    auto* base = reinterpret_cast<DotExpr*>(expr)->base;
+    assert(base->getKind() == Expr::Kind::Name && "Base of dot must be a name...");
 
-  auto* decl_ = it->second.decl;
+    auto key = reinterpret_cast<NameExpr*>(base)->name.str;
+    auto it = context->libs.find(std::string(key));
+    if (context->libs.end() == it || it->second->getKind() != Decl::Kind::Import) {
+      std::cerr << "No such import " << key << "\n";
+      exit(EXIT_FAILURE);
+    }
+    auto* new_file = context->parent->GetFile(Unescaped(reinterpret_cast<ImportDecl*>(it->second)->path.str));
+    return new_file->GetAndRunRule(reinterpret_cast<DotExpr*>(expr)->name.str);
+  } case Expr::Kind::Name:
+    return context->GetAndRunRule(reinterpret_cast<NameExpr*>(expr)->name.str);
+  default:
+    std::cerr << "Unexpected in ProcessLibraryBuildResult\n";
+    exit(EXIT_FAILURE);
+  }
+}
+
+std::vector<LibraryBuildResult*> ProcessLibraryBuildResultList(RuleFile* context, rule_spec::Option* option) {
+  using namespace rule_spec;
+  std::vector<LibraryBuildResult*> out;
+  if (!option) return out;
+  assert(option->value->getKind() == Expr::Kind::ArrayLiteral && "Must be array literal...");
+  auto* value = reinterpret_cast<ArrayLiteralExpr*>(option->value);
+  for (auto* child : value->values) {
+    out.push_back(ProcessLibraryBuildResult(context, child));
+  }
+  return out;
+}
+
+rule_spec::Module* ReadRuleFile(string_view path) {
+  rule_spec::Tokenizer tokens((new std::string{LoadFile(std::string(path) + "/BUILD")})->c_str());
+  return rule_spec::parser::DoParse(tokens);
+}
+
+LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
+  using namespace rule_spec;
+  std::string filename_gen;
+  auto& filename = context->filename;
+  auto* parent = context->parent;
+  if (string_view(filename).substr(0, 4) == "src/") {
+    filename_gen = "gen/" + filename.substr(4);
+  } else {
+    filename_gen = filename;
+  }
+
+  auto* decl_ = context->GetRuleDecl(rule_name);
   switch (decl_->getKind()) {
   case Decl::Kind::OldParser: {
     auto* decl = reinterpret_cast<OldParserDecl*>(decl_);
@@ -412,24 +333,15 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
     auto parser = GetStringOption(options["parser"]);
     auto tokenizer = GetStringOption(options["tokens"]);
     auto cc_out = GetStringOption(options["cc_out"]);
-    std::string h_out;
-    h_out = GetStringOption(options["h_out"]);
-
-    std::string filename_gen;
-    if (string_view(filename).substr(0, 4) == "src/") {
-      filename_gen = "gen/" + filename.substr(4);
-    } else {
-      filename_gen = filename;
-    }
+    std::string h_out = GetStringOption(options["h_out"]);
 
     auto* res = SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
-                       strdup(filename + "/" + tokenizer),
-                       strdup(".generated/" + filename_gen + "/" + cc_out),
-                       !h_out.empty() ? strdup(".generated/" + filename_gen + "/" + h_out) : nullptr,
-                       ".generated/" + filename_gen, cc_out);
+                                   strdup(filename + "/" + tokenizer),
+                                   strdup(".generated/" + filename_gen + "/" + cc_out),
+                                   strdup(".generated/" + filename_gen + "/" + h_out),
+                                   ".generated/" + filename_gen, cc_out);
 
-    it->second.result = res;
-    break;
+    return res;
   } case Decl::Kind::OldLoweringSpec: {
     auto* decl = reinterpret_cast<OldLoweringSpecDecl*>(decl_);
     auto options = IndexOptionSet(filename, rule_name, decl->options, {"src", "cc_out"});
@@ -437,18 +349,10 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
     auto src = GetStringOption(options["src"]);
     auto cc_out = GetStringOption(options["cc_out"]);
 
-    std::string filename_gen;
-    if (string_view(filename).substr(0, 4) == "src/") {
-      filename_gen = "gen/" + filename.substr(4);
-    } else {
-      filename_gen = filename;
-    }
-
     SimpleOldLoweringSpecGen({parent->default_flags}, strdup(filename + "/" + src),
-                       strdup(".generated/" + filename_gen + "/" + cc_out));
+                             strdup(".generated/" + filename_gen + "/" + cc_out));
 
-    it->second.result = new LibraryBuildResult; 
-    break;
+    return new LibraryBuildResult; 
   } case Decl::Kind::Library: {
     auto* decl = reinterpret_cast<LibraryDecl*>(decl_);
     auto options = IndexOptionSet(filename, rule_name, decl->options, {"deps", "srcs", "hdrs"});
@@ -458,77 +362,39 @@ LibraryBuildResult* RuleFile::GetAndRunRule(string_view rule_name) {
     for (auto& src : srcs) {
       srcs_copy.push_back(src);
     }
-    auto deps = ProcessLibraryBuildResultList(options["deps"]);
+    auto deps = ProcessLibraryBuildResultList(context, options["deps"]);
     deps.push_back(parent->default_flags);
-    it->second.result = SimpleCompileCXXFile(deps, filename, srcs_copy); 
-    break;
+    return SimpleCompileCXXFile(deps, filename, srcs_copy); 
+  } case Decl::Kind::Passes: {
+    auto* decl = reinterpret_cast<PassesDecl*>(decl_);
+    auto options = IndexOptionSet(filename, rule_name, decl->options, {"cc_out", "h_out"});
+
+    auto cc_out = GetStringOption(options["cc_out"]);
+    std::string h_out = GetStringOption(options["h_out"]);
+
+    passes::EmitPassesToFilename(
+        strdup(".generated/" + filename_gen + "/" + cc_out),
+        strdup(".generated/" + filename_gen + "/" + h_out));
+
+    return parent->default_flags;
   }
   default:
-  std::cerr << "Not a normal rule!: \"" << rule_name << "\"\n";
-  exit(EXIT_FAILURE);
+    std::cerr << "Not a normal rule!: \"" << rule_name << "\"\n";
+    exit(EXIT_FAILURE);
   }
-
-  if (it->second.result) return it->second.result;
-
-  std::cerr << "Problem while building: \"" << rule_name << "\"\n";
-  exit(EXIT_FAILURE);
 }
 
-void RuleFile::Link(string_view rule_name) {
-  auto it = links.find(std::string(rule_name));
-  if (it == links.end()) {
-    std::cerr << "No such link rule: \"" << rule_name << "\"\n";
-    exit(EXIT_FAILURE);
-  }
-  if (it->second.finished) return;
-  if (it->second.started) {
-    std::cerr << "Cycle while linking: \"" << rule_name << "\"\n";
-    exit(EXIT_FAILURE);
-  }
-  it->second.started = true;
+void DoLink(RuleFile* context, string_view rule_name) {
   LinkCommand out;
   out.output_name = strdup(".build/" + std::string(rule_name));
-  auto options = IndexOptionSet(filename, rule_name, it->second.decl->options, {"deps"});
-  out.deps = ProcessLibraryBuildResultList(options["deps"]);
+  auto options = IndexOptionSet(context->filename, rule_name,
+                                context->GetLinkDecl(rule_name)->options, {"deps"});
+  out.deps = ProcessLibraryBuildResultList(context, options["deps"]);
   BuildLinkCommand(&out);
-  it->second.finished = true;
 }
 
-LibraryBuildResult* RuleFile::ProcessLibraryBuildResult(rule_spec::Expr* expr) {
-  using namespace rule_spec;
-  switch (expr->getKind()) {
-  case Expr::Kind::Dot: {
-    auto* base = reinterpret_cast<DotExpr*>(expr)->base;
-    assert(base->getKind() == Expr::Kind::Name && "Base of dot must be a name...");
-
-    auto key = reinterpret_cast<NameExpr*>(base)->name.str;
-    auto it = libs.find(std::string(key));
-    if (libs.end() == it || it->second.decl->getKind() != Decl::Kind::Import) {
-      std::cerr << "No such import " << key << "\n";
-      exit(EXIT_FAILURE);
-    }
-    auto* new_file = parent->GetFile(Unescaped(reinterpret_cast<ImportDecl*>(it->second.decl)->path.str));
-    return new_file->GetAndRunRule(reinterpret_cast<DotExpr*>(expr)->name.str);
-  } case Expr::Kind::Name:
-    return GetAndRunRule(reinterpret_cast<NameExpr*>(expr)->name.str);
-  default:
-    std::cerr << "Unexpected in ProcessLibraryBuildResult\n";
-    exit(EXIT_FAILURE);
-  }
-}
-
-std::vector<LibraryBuildResult*> RuleFile::ProcessLibraryBuildResultList(rule_spec::Option* option) {
-  using namespace rule_spec;
-  std::vector<LibraryBuildResult*> out;
-  if (!option) return out;
-  assert(option->value->getKind() == Expr::Kind::ArrayLiteral && "Must be array literal...");
-  auto* value = reinterpret_cast<ArrayLiteralExpr*>(option->value);
-  for (auto* child : value->values) {
-    out.push_back(ProcessLibraryBuildResult(child));
-  }
-  return out;
-}
-
+}  // namespace rules
+#include "gen/rules/rules-passes.cc"
 
 int main(int argc, char **argv) {
   using namespace rule_spec;
@@ -538,32 +404,13 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
-  RuleSet rule_set;
+  rules::RuleModuleContext rule_set;
   // TODO: This is getting out of hand...
-  Run({"/bin/mkdir", "-p", ".build/objects/src/rules/"});
-  Run({"/bin/mkdir", "-p", ".build/objects/src/data/"});
-  Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/data/"});
-  Run({"/bin/mkdir", "-p", ".generated/gen/rules/"});
-  Run({"/bin/mkdir", "-p", ".generated/gen/data/"});
-  Run({"/bin/mkdir", "-p", ".build/objects/src/parser/"});
-  Run({"/bin/mkdir", "-p", ".generated/gen/parser/"});
-  Run({"/bin/mkdir", "-p", ".generated/gen/parser/types/"});
-  Run({"/bin/mkdir", "-p", ".generated/gen/parser/patterns/"});
-  Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/parser/"});
-  Run({"/bin/mkdir", "-p", ".build/objects/.generated/gen/rules/"});
-  Run({"/bin/mkdir", "-p", ".build/objects/src/parser/types"});
-  Run({"/bin/mkdir", "-p", ".build/objects/src/parser/patterns"});
-  rule_set.GetFile(argv[1])->Link(argv[2]);
+  rule_set.GetFile(argv[1])->LinkOrTrigger(argv[2]);
   // TODO: Remove this at some point (These are for linker errors).
   if (argv[2] == string_view("rules-dynamic")) {
     Run({"/bin/mv", ".build/rules-dynamic", ".build/rules"});
   }
-  if (argv[2] == string_view("parser-dynamic")) {
-    Run({"/bin/mv", ".build/parser-dynamic", ".build/parser"});
-  }
-  if (argv[2] == string_view("lowering-spec-tool-dynamic")) {
-    Run({"/bin/mv", ".build/lowering-spec-tool-dynamic", ".build/lowering-spec-tool"});
-  }
 
-  printf("\e[32mSuccess!\e[m\n");
+  fprintf(stderr, "\e[32mSuccess!\e[m\n");
 }
