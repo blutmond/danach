@@ -13,6 +13,18 @@
 #include "parser/parser_lowering.h"
 #include "rules/emit-passes.h"
 
+struct MkdirCache {
+  std::unordered_set<std::string> mkdirs;
+  void Ensure(const char* fname) {
+    auto key = std::string(fname);
+    if (mkdirs.find(key) == mkdirs.end()) {
+      mkdirs.insert(key);
+      Run({"/bin/mkdir", "-p", fname});
+    }
+  }
+};
+static MkdirCache mkdir;
+
 std::string Unescaped(string_view data) {
   std::string out;
   // TODO: This is bad (unsafe)
@@ -142,6 +154,7 @@ LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>&
     std::vector<const char*> eval = {"/usr/bin/ccache", "/usr/bin/clang-6.0", "-Wall", "-std=c++17"};
     CollectCXXFlags(postorder(deps), &eval);
     std::string base = std::string(RemoveExt(cxx_name));
+    mkdir.Ensure(strdup((".build/objects/" + std::string(folder))));
     const char* object_filename = strdup((".build/objects/" + std::string(folder) + "/"
                                           + base + ".o"));
     eval.push_back("-MF");
@@ -335,6 +348,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto cc_out = GetStringOption(options["cc_out"]);
     std::string h_out = GetStringOption(options["h_out"]);
 
+    mkdir.Ensure(strdup(".generated/" + filename_gen));
     auto* res = SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
                                    strdup(filename + "/" + tokenizer),
                                    strdup(".generated/" + filename_gen + "/" + cc_out),
@@ -349,6 +363,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto src = GetStringOption(options["src"]);
     auto cc_out = GetStringOption(options["cc_out"]);
 
+    mkdir.Ensure(strdup(".generated/" + filename_gen));
     SimpleOldLoweringSpecGen({parent->default_flags}, strdup(filename + "/" + src),
                              strdup(".generated/" + filename_gen + "/" + cc_out));
 
@@ -372,6 +387,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto cc_out = GetStringOption(options["cc_out"]);
     std::string h_out = GetStringOption(options["h_out"]);
 
+    mkdir.Ensure(strdup(".generated/" + filename_gen));
     passes::EmitPassesToFilename(
         strdup(".generated/" + filename_gen + "/" + cc_out),
         strdup(".generated/" + filename_gen + "/" + h_out));
