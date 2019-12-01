@@ -12,6 +12,11 @@ lib process {
   hdrs = ["process.h"];
 }
 
+lib string_utils {
+  srcs = ["string-utils.cc"];
+  hdrs = ["string-utils.h"];
+}
+
 lib emit_passes {
   srcs = ["emit-passes.cc"];
   hdrs = ["emit-passes.h"];
@@ -45,7 +50,7 @@ passes rules_passes {
 lib tool {
   srcs = ["tool.cc"];
   deps = [rule_spec, process, emit_passes, rules_passes, emit_passes_template,
-
+          string_utils,
           parser.parser_lowering,
           parser.lowering_spec_lowering,
           parser.tokenizer_helper];

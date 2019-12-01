@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <algorithm>
 #include "gen/rules/rule-spec.h"
+#include "rules/string-utils.h"
 #include "parser/lowering_spec_lowering.h"
 #include "parser/parser_lowering.h"
 #include "rules/emit-passes.h"
@@ -25,29 +26,6 @@ struct MkdirCache {
   }
 };
 static MkdirCache mkdir;
-
-std::string Unescaped(string_view data) {
-  std::string out;
-  // TODO: This is bad (unsafe)
-  data.remove_prefix(1);
-  data.remove_suffix(1);
-  size_t pos = data.find('\\');
-  while (pos != string_view::npos) {
-    out.append(data.data(), pos);
-    data.remove_prefix(pos);
-    data.remove_prefix(1);
-    if (data[0] == 'n') {
-      out.append(1, '\n');
-      data.remove_prefix(1);
-    } else if (data[0] == '\\') {
-      out.append(1, '\\');
-      data.remove_prefix(1);
-    }
-    pos = data.find('\\');
-  }
-  out.append(data.data(), data.size());
-  return out;
-}
 
 const char* strdup(std::string str) {
   return strdup(str.c_str());
@@ -287,6 +265,22 @@ std::string GetStringOption(rule_spec::Option* option) {
 #include "gen/rules/rules-passes.h"
 namespace rules {
 
+LibraryBuildResult *MakeGtkFlags(RuleModuleContext* ctx) {
+  auto* res = new LibraryBuildResult;
+  res->link_flags = {"-lgtk-3", "-lgdk-3", "-lpangocairo-1.0", "-lpango-1.0",
+    "-latk-1.0", "-lcairo-gobject", "-lcairo",
+    "-lgdk_pixbuf-2.0", "-lgio-2.0", "-lgobject-2.0", "-lglib-2.0"};
+  res->cxx_flags = {"-pthread", "-I/usr/include/gtk-3.0", "-I/usr/include/at-spi2-atk/2.0",
+    "-I/usr/include/at-spi-2.0", "-I/usr/include/dbus-1.0",
+    "-I/usr/lib/x86_64-linux-gnu/dbus-1.0/include", "-I/usr/include/gtk-3.0",
+    "-I/usr/include/gio-unix-2.0/", "-I/usr/include/cairo", "-I/usr/include/pango-1.0",
+    "-I/usr/include/harfbuzz", "-I/usr/include/pango-1.0", "-I/usr/include/atk-1.0",
+    "-I/usr/include/cairo", "-I/usr/include/pixman-1", "-I/usr/include/freetype2",
+    "-I/usr/include/libpng16", "-I/usr/include/gdk-pixbuf-2.0", "-I/usr/include/libpng16",
+    "-I/usr/include/glib-2.0", "-I/usr/lib/x86_64-linux-gnu/glib-2.0/include"};
+  return res;
+}
+
 LibraryBuildResult* ProcessLibraryBuildResult(RuleFile* context, rule_spec::Expr* expr) {
   using namespace rule_spec;
   switch (expr->getKind()) {
@@ -302,9 +296,13 @@ LibraryBuildResult* ProcessLibraryBuildResult(RuleFile* context, rule_spec::Expr
     }
     auto* new_file = context->parent->GetFile(Unescaped(reinterpret_cast<ImportDecl*>(it->second)->path.str));
     return new_file->GetAndRunRule(reinterpret_cast<DotExpr*>(expr)->name.str);
-  } case Expr::Kind::Name:
-    return context->GetAndRunRule(reinterpret_cast<NameExpr*>(expr)->name.str);
-  default:
+  } case Expr::Kind::Name: {
+    auto name = reinterpret_cast<NameExpr*>(expr)->name.str;
+    if (name == "gtk") {
+      return context->parent->gtk_flags();
+    }
+    return context->GetAndRunRule(name);
+  } default:
     std::cerr << "Unexpected in ProcessLibraryBuildResult\n";
     exit(EXIT_FAILURE);
   }

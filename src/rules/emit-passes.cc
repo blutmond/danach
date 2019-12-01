@@ -206,8 +206,33 @@ struct TopLevelDeclHack : public TopLevelDecl {
 };
 
 struct RuleSetHack : public IndexComponent {
-  virtual void EmitPublicDecls(std::ostream& stream) {
+  struct CachedKnownFlags {
+    const char* field_name;
+    const char* factory_name;
+  };
+  std::vector<CachedKnownFlags> flags_to_emit() {
+    return {{"gtk_flags", "MakeGtkFlags"}};
+  }
+  virtual void EmitPublicDecls(std::ostream& stream) override {
     stream << "  LibraryBuildResult* default_flags = MakeDefaultFlags();\n";
+    for (auto& fl : flags_to_emit()) {
+      stream << "  LibraryBuildResult* " << fl.field_name << "();\n";
+    }
+  }
+  virtual void EmitPrivateDecls(std::ostream& stream) override {
+    for (auto& fl : flags_to_emit()) {
+      stream << "  LibraryBuildResult* _cache_" << fl.field_name << " = nullptr;\n";
+    }
+  }
+  virtual void EmitImpls(std::ostream& stream) override {
+    for (auto& fl : flags_to_emit()) {
+      stream << "  LibraryBuildResult* " << parent->name << "::" << fl.field_name << "() {\n";
+      stream << "    if (_cache_" << fl.field_name << ") {\n";
+      stream << "      return _cache_" << fl.field_name << ";\n";
+      stream << "    }\n";
+      stream << "    return _cache_" << fl.field_name << " = " << fl.factory_name << "(this);\n";
+      stream << "  }\n";
+    }
   }
 };
 
