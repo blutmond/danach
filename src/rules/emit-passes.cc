@@ -1,16 +1,22 @@
 #include "rules/emit-passes.h"
 #include "parser/parser-support.h"
+#include "rules/template-support.h"
 
 #include <fstream>
 #include <sstream>
 #include <iostream>
+
+// #define TURN_OFF
+#ifndef TURN_OFF
+#include "gen/rules/emit-passes-meta.h"
+#else
 
 namespace passes {
 
 struct ContextDef;
 
 struct IndexComponent {
-  ContextDef* context;
+  ContextDef* parent;
   virtual void EmitPublicDecls(std::ostream& stream) {}
   virtual void EmitPrivateDecls(std::ostream& stream) {}
   virtual void EmitImpls(std::ostream& stream) {}
@@ -24,37 +30,51 @@ struct TopLevelDecl {
 
 struct ContextDef : public TopLevelDecl {
   string_view name;
-  ContextDef* parent;
+  ContextDef* context = nullptr;
 
-  virtual void EmitStructFwdDeclare(std::ostream& stream) {
-    stream << "class " << name << ";\n";
-  }
-  virtual void EmitFwdDeclare(std::ostream& stream) {
-    stream << "\n";
-    stream << "class " << name << " {\n";
-    stream << " public:\n";
-    for (auto* item : items) {
-      item->EmitPublicDecls(stream);
-    }
-    stream << " private:\n";
-    for (auto* item : items) {
-      item->EmitPrivateDecls(stream);
-    }
-    stream << "};\n";
-  }
-  virtual void EmitDefinitions(std::ostream& stream) {
-    for (auto* item : items) {
-      stream << "\n";
-      item->EmitImpls(stream);
-    }
-  }
-  void AddDecl(IndexComponent* decl) {
-    items.push_back(decl);
-    decl->context = this;
-  }
+  virtual void EmitStructFwdDeclare(std::ostream& stream);
+  virtual void EmitFwdDeclare(std::ostream& stream);
+  virtual void EmitDefinitions(std::ostream& stream);
+  void add_decls(IndexComponent* decl);
  private:
-  std::vector<IndexComponent*> items;
+  std::vector<IndexComponent*> decls;
 };
+
+}  // namespace passes
+
+#endif
+
+namespace passes {
+
+void ContextDef::EmitStructFwdDeclare(std::ostream& stream) {
+  stream << "class " << name << ";\n";
+}
+
+void ContextDef::EmitFwdDeclare(std::ostream& stream) {
+  stream << "\n";
+  stream << "class " << name << " {\n";
+  stream << " public:\n";
+  for (auto* item : decls) {
+    item->EmitPublicDecls(stream);
+  }
+  stream << " private:\n";
+  for (auto* item : decls) {
+    item->EmitPrivateDecls(stream);
+  }
+  stream << "};\n";
+}
+
+void ContextDef::EmitDefinitions(std::ostream& stream) {
+  for (auto* item : decls) {
+    stream << "\n";
+    item->EmitImpls(stream);
+  }
+}
+
+void ContextDef::add_decls(IndexComponent* decl) {
+  decls.push_back(decl);
+  decl->parent = this;
+}
 
 struct Module {
   string_view ns;
@@ -74,7 +94,7 @@ struct MemoizedFunction : public IndexComponent {
   }
   virtual void EmitImpls(std::ostream& stream) {
     // Check for possible cycles...
-    stream << result_type << "* " << context->name << "::"
+    stream << result_type << "* " << parent->name << "::"
         << name << "(string_view key) {\n";
     stream << "  auto key_copy = std::string(key);\n";
     stream << "  auto it = " << name << "_storage.find(key_copy);\n";
@@ -107,7 +127,7 @@ struct MemoizedCycleDetector : public IndexComponent {
 
   virtual void EmitImpls(std::ostream& stream) {
     stream << result_type << (result_type == "void" ? " " : "* ")
-        << context->name << "::" << name << "(string_view key) {\n";
+        << parent->name << "::" << name << "(string_view key) {\n";
     stream << "  auto& state = " << name << "_storage[std::string(key)];\n";
 //    stream << "  std::cout << \"Running(" << name << ", \" << key << \")\\n\";";
     stream << "  if (!state.finished) {\n";
@@ -158,7 +178,7 @@ struct PathLookup : public IndexComponent {
     stream << "  " << result_type << " " << name << "(string_view path);\n";
   }
   virtual void EmitImpls(std::ostream& stream) {
-    stream << result_type << " " << context->name << "::" << name << "(string_view path) {\n";
+    stream << result_type << " " << parent->name << "::" << name << "(string_view path) {\n";
     stream << "  auto it = " << set_name << ".find(std::string(path));\n";
     stream << "  if (it == " << set_name << ".end()) {\n";
     stream << "    std::cerr << \"No such " << name << ": \" << path << \"\\n\";\n";
@@ -203,10 +223,10 @@ struct RuleFileHack : public IndexComponent {
     stream << "  std::unordered_map<std::string, rule_spec::Decl*> libs;\n";
   }
   virtual void EmitImpls(std::ostream& stream) {
-    stream << "void " << context->name << "::DoIndex() {\n";
+    stream << "void " << parent->name << "::DoIndex() {\n";
     stream << "  for (auto* decl_ : module->decls) {\n";
     stream << "    switch (decl_->getKind()) {\n";
-    for (string_view decl_type : {"Import", "OldParser", "OldLoweringSpec", "Library", "Passes"}) {
+    for (string_view decl_type : {"Import", "OldParser", "OldLoweringSpec", "Library", "Passes", "PassesTemplate"}) {
     stream << "    case rule_spec::Decl::Kind::" << decl_type << ": {\n";
     stream << "      auto* decl = reinterpret_cast<rule_spec::" << decl_type << "Decl*>(decl_);\n";
     stream << "      auto key = std::string(decl->name.str);\n";
@@ -239,7 +259,7 @@ struct RuleFileLinkOrTrigger : public IndexComponent {
     stream << "  void LinkOrTrigger(string_view rule_name);\n";
   }
   virtual void EmitImpls(std::ostream& stream) {
-    stream << "void " << context->name << "::LinkOrTrigger(string_view rule_name) {\n";
+    stream << "void " << parent->name << "::LinkOrTrigger(string_view rule_name) {\n";
     stream << "  if (links.find(std::string(rule_name)) != links.end()) {\n";
     stream << "    return Link(rule_name);\n";
     stream << "  }\n";
@@ -262,65 +282,56 @@ void EmitPassesToFilename(const char* cc_fname,
     idx->result_type = "RuleFile";
     idx->name = "GetFile";
     idx->fn_name = "LoadRuleFile";
-    root_def->AddDecl(idx);
+    root_def->add_decls(idx);
   }
   {
     auto* idx = new RuleSetHack;
-    root_def->AddDecl(idx);
+    root_def->add_decls(idx);
   }
   auto* def = new ContextDef;
   module->decls.push_back(def);
   def->name = "RuleFile";
-  def->parent = root_def;
-  def->AddDecl(new RuleFileHack);
-  def->AddDecl(new RuleFileLinkOrTrigger);
+  def->context = root_def;
+  def->add_decls(new RuleFileHack);
+  def->add_decls(new RuleFileLinkOrTrigger);
   {
     auto* idx = new MemoizedCycleDetector;
     idx->result_type = "LibraryBuildResult";
     idx->name = "GetAndRunRule";
     idx->fn_name = "DoGetAndRunRule";
-    def->AddDecl(idx);
+    def->add_decls(idx);
   }
   {
     auto* idx = new MemoizedCycleDetector;
     idx->result_type = "void";
     idx->name = "Link";
     idx->fn_name = "DoLink";
-    def->AddDecl(idx);
+    def->add_decls(idx);
   }
   {
     auto* idx = new PathLookup;
     idx->result_type = "rule_spec::LinkDecl*";
     idx->name = "GetLinkDecl";
     idx->set_name = "links";
-    def->AddDecl(idx);
+    def->add_decls(idx);
   }
   {
     auto* idx = new PathLookup;
     idx->result_type = "rule_spec::Decl*";
     idx->name = "GetRuleDecl";
     idx->set_name = "libs";
-    def->AddDecl(idx);
+    def->add_decls(idx);
   }
 
-  std::string cc_output;
-  std::stringstream cc_stream(cc_output);
-  std::string h_output;
-  std::stringstream h_stream(h_output);
-
-  EmitModule(module, cc_stream, h_stream);
-  {
-    cc_stream.flush();
-    std::ofstream ofs(cc_fname, std::ofstream::out | std::ofstream::trunc);
-    ofs << cc_stream.str();
-    ofs.close();
-  }
-  {
-    h_stream.flush();
-    std::ofstream ofs(h_fname, std::ofstream::out | std::ofstream::trunc);
-    ofs << h_stream.str();
-    ofs.close();
-  }
+  EmitStream cc;
+  EmitStream h;
+  EmitModule(module, cc.stream(), h.stream());
+  h.write(h_fname);
+  cc.write(cc_fname);
 }
 
 }  // namespace passes
+
+#ifndef TURN_OFF
+#include "gen/rules/emit-passes-meta.cc"
+#endif

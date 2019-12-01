@@ -1,0 +1,33 @@
+module interface_spec;
+
+regex basic {
+  let digit = "0" : "9";
+  let id = ("a" : "z") | "_" | ("A" : "Z");
+  let all = (" " : "~");
+  emit dot = ".";
+  emit plus = "+";
+  emit pipe = "|";
+  emit star = "*";
+  emit semi = ";";
+  emit comma = ",";
+  emit equal = "=";
+  emit open_arr = "<";
+  emit close_arr = ">";
+  emit open_paran = "(";
+  emit close_paran = ")";
+  emit open_brace = "{";
+  emit close_brace = "}";
+  emit open_bracket = "[";
+  emit close_bracket = "]";
+  emit percent = "%";
+  emit bang = "!";
+  emit arrow = "->";
+  emit colon = ":";
+  emit coloncolon = "::";
+  emit eof = 0;
+  ignore "\n";
+  ignore " ";
+  emit identifier = id . (id | digit)*;
+  emit str = "\"" . (("\\" . all) | (" " : "!") | ("#" : "[") | ("]" : "~"))* . "\"";
+  emit number = digit+;
+}

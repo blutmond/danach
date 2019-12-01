@@ -71,6 +71,16 @@ void RuleFile::DoIndex() {
       libs[key] = decl;
       break;
     }
+    case rule_spec::Decl::Kind::PassesTemplate: {
+      auto* decl = reinterpret_cast<rule_spec::PassesTemplateDecl*>(decl_);
+      auto key = std::string(decl->name.str);
+      if (libs.find(key) != libs.end()) {
+        fprintf(stderr, "Duplicate rule: %s\n", key.c_str());
+        exit(EXIT_FAILURE);
+      }
+      libs[key] = decl;
+      break;
+    }
     case rule_spec::Decl::Kind::Link: {
       auto* decl = reinterpret_cast<rule_spec::LinkDecl*>(decl_);
       auto key = Unescaped(decl->fname.str);

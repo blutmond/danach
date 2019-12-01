@@ -20,6 +20,7 @@ production Decl {
   pattern OldLoweringSpec { "old_lowering_spec" %name = identifier "{" %options = concat { Option } "}" }
   pattern Library {"lib" %name = identifier "{" %options = concat { Option } "}" }
   pattern Passes {"passes" %name = identifier "{" %options = concat { Option } "}" }
+  pattern PassesTemplate {"passes_meta" %name = identifier "{" %options = concat { Option } "}" }
   pattern Link { "link" %fname = str "{" %options = concat { Option } "}" }
 }
 

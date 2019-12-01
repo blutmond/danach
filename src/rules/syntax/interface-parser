@@ -1,0 +1,42 @@
+module interface_spec;
+
+entry Module;
+tokenizer basic;
+
+expr TypeExpr {
+  pattern Opaque { "!" "<" %value = str ">" }
+  pattern Vector { "vector" "<" %element = TypeExpr ">" }
+  pattern Nominal { %value = identifier }
+}
+
+define ArgSignature { %name = identifier ":" %type = TypeExpr }
+
+define FuncSignature { "(" %args = concat { ArgSignature } ")" "->" %ret_t = TypeExpr }
+
+production Attr {
+  pattern Mandatory { "mandatory" }
+  pattern IsChildList { "is_child_list" }
+  pattern Default { "default_value" "(" %value = str")" }
+}
+
+production InterfaceBodyDecl {
+  pattern Func { "func" %name = identifier %sig = FuncSignature %attrs = concat { Attr } ";" }
+  pattern Parent { "parent" %name = identifier ";" }
+}
+
+production ConcreteBodyDecl {
+  pattern Func { "override" %name = identifier %sig = FuncSignature ";" }
+  pattern Var { "var" %name = identifier ":" %type = TypeExpr %attrs = concat { Attr } ";" }
+}
+
+production Decl {
+  pattern Interface { "interface" %name = identifier "{" %body = concat { InterfaceBodyDecl } "}" }
+  pattern Concrete { "concrete" %name = identifier ":" %implements = identifier "{" %body = concat { ConcreteBodyDecl } "}" }
+  pattern ConcreteWithoutInterface { "concrete" %name = identifier "{" %body = concat { ConcreteBodyDecl } "}" }
+  pattern TypeAlias { "alias" %name = identifier "=" %type = TypeExpr ";" }
+}
+
+define Module {
+  "namespace" %ns = identifier ";"
+  %decls = concat { Decl }
+}

@@ -15,6 +15,26 @@ lib process {
 lib emit_passes {
   srcs = ["emit-passes.cc"];
   hdrs = ["emit-passes.h"];
+  deps = [emit_passes_meta];
+}
+
+passes_meta emit_passes_meta {
+  src = "emit-passes-meta";
+  cc_out = "emit-passes-meta.cc";
+  h_out = "emit-passes-meta.h";
+}
+
+lib emit_passes_template {
+  srcs = ["emit-passes-template.cc"];
+  hdrs = ["emit-passes-template.h"];
+  deps = [interface];
+}
+
+old_parser interface {
+  parser = "syntax/interface-parser";
+  tokens = "syntax/interface-tokenizer";
+  cc_out = "interface.cc";
+  h_out = "interface.h";
 }
 
 passes rules_passes {
@@ -24,15 +44,8 @@ passes rules_passes {
 
 lib tool {
   srcs = ["tool.cc"];
-  deps = [rule_spec, process, emit_passes,
-          parser.parser_lowering,
-          parser.lowering_spec_lowering,
-          parser.tokenizer_helper];
-}
+  deps = [rule_spec, process, emit_passes, rules_passes, emit_passes_template,
 
-lib tool2 {
-  srcs = ["tool2.cc"];
-  deps = [rule_spec, process, emit_passes, rules_passes,
           parser.parser_lowering,
           parser.lowering_spec_lowering,
           parser.tokenizer_helper];

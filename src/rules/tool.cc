@@ -12,6 +12,7 @@
 #include "parser/lowering_spec_lowering.h"
 #include "parser/parser_lowering.h"
 #include "rules/emit-passes.h"
+#include "rules/emit-passes-template.h"
 
 struct MkdirCache {
   std::unordered_set<std::string> mkdirs;
@@ -380,6 +381,22 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto deps = ProcessLibraryBuildResultList(context, options["deps"]);
     deps.push_back(parent->default_flags);
     return SimpleCompileCXXFile(deps, filename, srcs_copy); 
+  } case Decl::Kind::PassesTemplate: {
+    auto* decl = reinterpret_cast<PassesDecl*>(decl_);
+    auto options = IndexOptionSet(filename, rule_name, decl->options, {"cc_out", "h_out", "src"});
+
+    auto cc_out = GetStringOption(options["cc_out"]);
+    std::string h_out = GetStringOption(options["h_out"]);
+    auto src = GetStringOption(options["src"]);
+
+
+    mkdir.Ensure(strdup(".generated/" + filename_gen));
+    passes_template::EmitPassesTemplateToFilename(
+        strdup(filename + "/" + src),
+        strdup(".generated/" + filename_gen + "/" + cc_out),
+        strdup(".generated/" + filename_gen + "/" + h_out));
+
+    return parent->default_flags;
   } case Decl::Kind::Passes: {
     auto* decl = reinterpret_cast<PassesDecl*>(decl_);
     auto options = IndexOptionSet(filename, rule_name, decl->options, {"cc_out", "h_out"});

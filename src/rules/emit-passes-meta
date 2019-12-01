@@ -1,0 +1,31 @@
+namespace passes;
+
+alias unit = !<"void">;
+alias string_view = !<"string_view">;
+alias parent = !<"ContextDef*">;
+alias IndexComponent = !<"IndexComponent*">;
+alias ContextDef = !<"ContextDef*">;
+alias stream_t = !<"std::ostream&">;
+alias TopLevelDecl = !<"TopLevelDecl*">;
+
+interface TopLevelDecl {
+  func EmitStructFwdDeclare(stream: stream_t) -> unit;
+  func EmitFwdDeclare(stream: stream_t) -> unit;
+  func EmitDefinitions(stream: stream_t) -> unit;
+}
+
+concrete ContextDef : TopLevelDecl {
+  var name: string_view;
+  var context: ContextDef default_value(" = nullptr");
+  var decls: vector<IndexComponent> is_child_list;
+  override EmitStructFwdDeclare(stream: stream_t) -> unit;
+  override EmitFwdDeclare(stream: stream_t) -> unit;
+  override EmitDefinitions(stream: stream_t) -> unit;
+}
+
+interface IndexComponent {
+  parent ContextDef;
+  func EmitPublicDecls(stream: stream_t) -> unit;
+  func EmitPrivateDecls(stream: stream_t) -> unit;
+  func EmitImpls(stream: stream_t) -> unit;
+}
