@@ -269,6 +269,8 @@ LibraryBuildResult *MakeGtkFlags(RuleModuleContext* ctx) {
   auto* res = new LibraryBuildResult;
   res->link_flags = {"-lgtk-3", "-lgdk-3", "-lpangocairo-1.0", "-lpango-1.0",
     "-latk-1.0", "-lcairo-gobject", "-lcairo",
+      "-lfontconfig",
+      "-lfreetype",
     "-lgdk_pixbuf-2.0", "-lgio-2.0", "-lgobject-2.0", "-lglib-2.0"};
   res->cxx_flags = {"-pthread", "-I/usr/include/gtk-3.0", "-I/usr/include/at-spi2-atk/2.0",
     "-I/usr/include/at-spi-2.0", "-I/usr/include/dbus-1.0",
@@ -278,6 +280,12 @@ LibraryBuildResult *MakeGtkFlags(RuleModuleContext* ctx) {
     "-I/usr/include/cairo", "-I/usr/include/pixman-1", "-I/usr/include/freetype2",
     "-I/usr/include/libpng16", "-I/usr/include/gdk-pixbuf-2.0", "-I/usr/include/libpng16",
     "-I/usr/include/glib-2.0", "-I/usr/lib/x86_64-linux-gnu/glib-2.0/include"};
+  return res;
+}
+
+LibraryBuildResult *MakeDLFlags(RuleModuleContext* ctx) {
+  auto* res = new LibraryBuildResult;
+  res->link_flags = {"-ldl"};
   return res;
 }
 
@@ -300,6 +308,9 @@ LibraryBuildResult* ProcessLibraryBuildResult(RuleFile* context, rule_spec::Expr
     auto name = reinterpret_cast<NameExpr*>(expr)->name.str;
     if (name == "gtk") {
       return context->parent->gtk_flags();
+    }
+    if (name == "dl") {
+      return context->parent->dl_flags();
     }
     return context->GetAndRunRule(name);
   } default:

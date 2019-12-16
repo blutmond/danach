@@ -17,6 +17,11 @@ lib string_utils {
   hdrs = ["string-utils.h"];
 }
 
+lib clang_error_parse {
+  srcs = ["clang-error-parse.cc"];
+  hdrs = ["clang-error-parse.h"];
+}
+
 lib emit_passes {
   srcs = ["emit-passes.cc"];
   hdrs = ["emit-passes.h"];

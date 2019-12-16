@@ -9,9 +9,11 @@ class RuleModuleContext {
   RuleFile* GetFile(string_view key);
   LibraryBuildResult* default_flags = MakeDefaultFlags();
   LibraryBuildResult* gtk_flags();
+  LibraryBuildResult* dl_flags();
  private:
   std::unordered_map<std::string, RuleFile*> GetFile_storage;
   LibraryBuildResult* _cache_gtk_flags = nullptr;
+  LibraryBuildResult* _cache_dl_flags = nullptr;
 };
   RuleFile* LoadRuleFile(RuleModuleContext* ctx, string_view path);
 

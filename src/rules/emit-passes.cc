@@ -211,7 +211,8 @@ struct RuleSetHack : public IndexComponent {
     const char* factory_name;
   };
   std::vector<CachedKnownFlags> flags_to_emit() {
-    return {{"gtk_flags", "MakeGtkFlags"}};
+    return {{"gtk_flags", "MakeGtkFlags"},
+            {"dl_flags", "MakeDLFlags"}};
   }
   virtual void EmitPublicDecls(std::ostream& stream) override {
     stream << "  LibraryBuildResult* default_flags = MakeDefaultFlags();\n";

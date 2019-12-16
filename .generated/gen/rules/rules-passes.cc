@@ -15,6 +15,12 @@ RuleFile* RuleModuleContext::GetFile(string_view key) {
     }
     return _cache_gtk_flags = MakeGtkFlags(this);
   }
+  LibraryBuildResult* RuleModuleContext::dl_flags() {
+    if (_cache_dl_flags) {
+      return _cache_dl_flags;
+    }
+    return _cache_dl_flags = MakeDLFlags(this);
+  }
 RuleFile* LoadRuleFile(RuleModuleContext* ctx, string_view path) {
   auto* result = new RuleFile;
   result->parent = ctx;
