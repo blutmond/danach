@@ -312,6 +312,7 @@ struct LibraryDecl;
 struct PassesDecl;
 struct PassesTemplateDecl;
 struct LinkDecl;
+struct SoLinkDecl;
 struct Expr;
 struct NameExpr;
 struct StringLiteralExpr;
@@ -322,7 +323,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link,
+    Import, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -368,6 +369,12 @@ struct PassesTemplateDecl: public Decl {
 
 struct LinkDecl: public Decl {
   LinkDecl() : Decl(Kind::Link) {}
+  tok::Token fname;
+  std::vector<Option*> options;
+};
+
+struct SoLinkDecl: public Decl {
+  SoLinkDecl() : Decl(Kind::SoLink) {}
   tok::Token fname;
   std::vector<Option*> options;
 };
@@ -610,6 +617,26 @@ if (tokens.peak_check_str("link")) {
 tokens.expect("link");
 auto result = ({
 auto __current_self = new LinkDecl;__current_self->fname = tokens.expect(tok::str);
+tokens.expect("{");
+__current_self->options = ([&]{
+std::vector<Option*> __current_vector__;
+    while (true) {
+   if (tokens.peak_check_str("}")) { break; }
+ __current_vector__.push_back([&]{auto result = _production_Option(tokens);
+return result;
+ }());  }
+return __current_vector__;
+}())
+;
+tokens.expect("}");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("solink")) {
+tokens.expect("solink");
+auto result = ({
+auto __current_self = new SoLinkDecl;__current_self->fname = tokens.expect(tok::str);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;

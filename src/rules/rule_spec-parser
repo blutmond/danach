@@ -22,6 +22,7 @@ production Decl {
   pattern Passes {"passes" %name = identifier "{" %options = concat { Option } "}" }
   pattern PassesTemplate {"passes_meta" %name = identifier "{" %options = concat { Option } "}" }
   pattern Link { "link" %fname = str "{" %options = concat { Option } "}" }
+  pattern SoLink { "solink" %fname = str "{" %options = concat { Option } "}" }
 }
 
 define Module {

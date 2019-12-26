@@ -103,12 +103,23 @@ void RuleFile::DoIndex() {
       links[key] = decl;
       break;
     }
+    case rule_spec::Decl::Kind::SoLink: {
+      auto* decl = reinterpret_cast<rule_spec::SoLinkDecl*>(decl_);
+      auto key = Unescaped(decl->fname.str);
+      if (links.find(key) != links.end()) {
+        fprintf(stderr, "Duplicate link rule: %s\n", key.c_str());
+        exit(EXIT_FAILURE);
+      }
+      links[key] = decl;
+      break;
+    }
     }
   }
 }
 
 void RuleFile::LinkOrTrigger(string_view rule_name) {
-  if (links.find(std::string(rule_name)) != links.end()) {
+  auto it = links.find(std::string(rule_name));
+  if (it != links.end()) {
     return Link(rule_name);
   }
   GetAndRunRule(rule_name);
@@ -135,7 +146,7 @@ void RuleFile::Link(string_view key) {
   }
 }
 
-rule_spec::LinkDecl* RuleFile::GetLinkDecl(string_view path) {
+rule_spec::Decl* RuleFile::GetLinkDecl(string_view path) {
   auto it = links.find(std::string(path));
   if (it == links.end()) {
     std::cerr << "No such GetLinkDecl: " << path << "\n";

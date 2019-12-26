@@ -217,7 +217,14 @@ LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResul
 LibraryBuildResult *MakeDefaultFlags() {
   auto* res = new LibraryBuildResult;
   res->link_flags = {"-lstdc++"};
-  res->cxx_flags = {"-I", ".generated/", "-I", "src", "-I", ".build/"};
+  res->cxx_flags = {"-fpic", "-I", ".generated/", "-I", "src", "-I", ".build/"};
+  return res;
+}
+
+LibraryBuildResult *MakeSoFlags() {
+  auto* res = new LibraryBuildResult;
+  res->link_flags = {"-shared", "-Wl,-z,defs", "-Wl,-rpath='$ORIGIN'"};
+  res->cxx_flags = {};
   return res;
 }
 
@@ -427,12 +434,29 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
 }
 
 void DoLink(RuleFile* context, string_view rule_name) {
-  LinkCommand out;
-  out.output_name = strdup(".build/" + std::string(rule_name));
-  auto options = IndexOptionSet(context->filename, rule_name,
-                                context->GetLinkDecl(rule_name)->options, {"deps"});
-  out.deps = ProcessLibraryBuildResultList(context, options["deps"]);
-  BuildLinkCommand(&out);
+  auto* decl_ = context->GetLinkDecl(rule_name);
+  switch (decl_->getKind()) {
+  case rule_spec::Decl::Kind::Link: {
+    auto* decl = reinterpret_cast<rule_spec::LinkDecl*>(decl_);
+    LinkCommand out;
+    out.output_name = strdup(".build/" + std::string(rule_name));
+    auto options = IndexOptionSet(context->filename, rule_name, decl->options, {"deps"});
+    out.deps = ProcessLibraryBuildResultList(context, options["deps"]);
+    BuildLinkCommand(&out);
+    return;
+  } case rule_spec::Decl::Kind::SoLink: {
+    auto* decl = reinterpret_cast<rule_spec::SoLinkDecl*>(decl_);
+    LinkCommand out;
+    out.output_name = strdup(".build/" + std::string(rule_name));
+    auto options = IndexOptionSet(context->filename, rule_name, decl->options, {"deps"});
+    out.deps = ProcessLibraryBuildResultList(context, options["deps"]);
+    out.deps.push_back(context->parent->so_flags);
+    BuildLinkCommand(&out);
+    return;
+  } default:
+    std::cerr << "Not a normal rule!: \"" << rule_name << "\"\n";
+    exit(EXIT_FAILURE);
+  }
 }
 
 }  // namespace rules

@@ -216,6 +216,7 @@ struct RuleSetHack : public IndexComponent {
   }
   virtual void EmitPublicDecls(std::ostream& stream) override {
     stream << "  LibraryBuildResult* default_flags = MakeDefaultFlags();\n";
+    stream << "  LibraryBuildResult* so_flags = MakeSoFlags();\n";
     for (auto& fl : flags_to_emit()) {
       stream << "  LibraryBuildResult* " << fl.field_name << "();\n";
     }
@@ -245,7 +246,7 @@ struct RuleFileHack : public IndexComponent {
     stream << "  void DoIndex();\n";
 //  }
 //  virtual void EmitPrivateDecls(std::ostream& stream) {
-    stream << "  std::unordered_map<std::string, rule_spec::LinkDecl*> links;\n";
+    stream << "  std::unordered_map<std::string, rule_spec::Decl*> links;\n";
     stream << "  std::unordered_map<std::string, rule_spec::Decl*> libs;\n";
   }
   virtual void EmitImpls(std::ostream& stream) {
@@ -264,8 +265,9 @@ struct RuleFileHack : public IndexComponent {
     stream << "      break;\n";
     stream << "    }\n";
     }
-    stream << "    case rule_spec::Decl::Kind::Link: {\n";
-    stream << "      auto* decl = reinterpret_cast<rule_spec::LinkDecl*>(decl_);\n";
+    for (string_view decl_type : {"Link", "SoLink"}) {
+    stream << "    case rule_spec::Decl::Kind::" << decl_type << ": {\n";
+    stream << "      auto* decl = reinterpret_cast<rule_spec::" << decl_type << "Decl*>(decl_);\n";
     stream << "      auto key = Unescaped(decl->fname.str);\n";
     stream << "      if (links.find(key) != links.end()) {\n";
     stream << "        fprintf(stderr, \"Duplicate link rule: %s\\n\", key.c_str());\n";
@@ -274,6 +276,7 @@ struct RuleFileHack : public IndexComponent {
     stream << "      links[key] = decl;\n";
     stream << "      break;\n";
     stream << "    }\n";
+    }
     stream << "    }\n";
     stream << "  }\n";
     stream << "}\n";
@@ -286,7 +289,8 @@ struct RuleFileLinkOrTrigger : public IndexComponent {
   }
   virtual void EmitImpls(std::ostream& stream) {
     stream << "void " << parent->name << "::LinkOrTrigger(string_view rule_name) {\n";
-    stream << "  if (links.find(std::string(rule_name)) != links.end()) {\n";
+    stream << "  auto it = links.find(std::string(rule_name));\n";
+    stream << "  if (it != links.end()) {\n";
     stream << "    return Link(rule_name);\n";
     stream << "  }\n";
     stream << "  GetAndRunRule(rule_name);\n";
@@ -336,7 +340,7 @@ void EmitPassesToFilename(const char* cc_fname,
   }
   {
     auto* idx = new PathLookup;
-    idx->result_type = "rule_spec::LinkDecl*";
+    idx->result_type = "rule_spec::Decl*";
     idx->name = "GetLinkDecl";
     idx->set_name = "links";
     def->add_decls(idx);

@@ -1,6 +1,9 @@
 #include "gui/so-handle.h"
 #include "gui/so-handoff-lib.h"
 #include "gui/font-face.h"
+#include "gui/buffer.h"
+#include "rules/template-support.h"
+#include "parser/parser-support.h"
 
 #include <iostream>
 #include <sstream>
@@ -59,77 +62,6 @@ void DoDrawLines(gui::DrawCtx& cr, double scroll,
   }
 }
 
-struct BufferPos {
-  size_t row = 0;
-  size_t col = 0;
-};
-
-struct Buffer {
-  std::vector<std::string> lines{{""}};
-
-  bool operator==(const Buffer& other) const {
-    return lines == other.lines;
-  }
-
-  void Print() {
-    for (const auto& ln : lines) {
-      printf("ln: \"%s\"\n", ln.c_str());
-    }
-  }
-};
-
-void Insert(Buffer& buffer, BufferPos& cursor, char c) {
-  if (c == '\n') {
-    buffer.lines.insert(buffer.lines.begin() + (cursor.row + 1), 
-                         buffer.lines[cursor.row].substr(cursor.col));
-    buffer.lines[cursor.row] = buffer.lines[cursor.row].substr(0, cursor.col);
-    cursor.row += 1;
-    cursor.col = 0;
-  } else {
-    auto& str = buffer.lines[cursor.row];
-    str.insert(str.begin() + cursor.col, c);
-    cursor.col += 1;
-  }
-}
-
-void Insert(Buffer& buffer, BufferPos& cursor, string_view text) {
-  for (char c : text) {
-    Insert(buffer, cursor, c);
-  }
-}
-
-void Delete(Buffer& buffer, BufferPos s_pos, BufferPos e_pos) {
-  auto& lines_ = buffer.lines;
-    if (s_pos.row == e_pos.row) {
-      std::string& target = lines_[e_pos.row];
-      if (!(s_pos.col < e_pos.col)) {
-        fprintf(stderr, "error");
-        exit(EXIT_FAILURE);
-      }
-      if (!(e_pos.col <= target.size())) {
-        fprintf(stderr, "error");
-        exit(EXIT_FAILURE);
-      }
-      target.erase(target.begin() + s_pos.col,
-                   target.begin() + e_pos.col);
-    } else {
-      auto tmp = std::move(lines_[e_pos.row]);
-      std::string& target = lines_[s_pos.row];
-      target.resize(s_pos.col);
-      // This also has a copy.
-      target += tmp.substr(e_pos.col);
-
-      lines_.erase(lines_.begin() + s_pos.row + 1,
-                   lines_.begin() + e_pos.row + 1);
-    }
-  // buffer.lines.
-}
-
-void Init(Buffer& buffer, string_view text) {
-  BufferPos pos{0,0};
-  Insert(buffer, pos, text);
-}
-
 void FlushLineWithCursor(gui::DrawCtx& cr, gui::Point st, gui::FontLayoutFace* font,
                          std::vector<cairo_glyph_t>& glyphs, size_t col) {
   font->Flush(cr, glyphs.data(), col);
@@ -173,72 +105,6 @@ void DrawBuffer(gui::DrawCtx& cr, gui::Point st, const Buffer& buffer, BufferPos
   }
 }
 
-struct IdBuffer {
-  size_t id;
-  Buffer* buffer;
-};
-void SaveFile(std::ostream& ss, const std::vector<IdBuffer>& buffers) {
-  for (auto& buff : buffers) {
-    ss << "#" << buff.id << "\n";
-    for (auto& line : buff.buffer->lines) {
-      if (!line.empty() && line[0] == '#') {
-        ss << "#";
-      }
-      ss << line << "\n";
-    }
-  }
-}
-
-struct ParsedIdBuffer {
-  size_t id;
-  Buffer buffer;
-  bool operator==(const ParsedIdBuffer& other) const {
-    return other.id == id && other.buffer == buffer;
-  }
-};
-std::vector<ParsedIdBuffer> ParseMultiBuffer(string_view data) {
-  std::vector<ParsedIdBuffer> out;
-
-  auto cursor = data;
-  while (!cursor.empty()) {
-    if (cursor[0] == '#') {
-      cursor.remove_prefix(1);
-      auto s = cursor.find('\n');
-      if (s == string_view::npos) {
-        fprintf(stderr, "%d: Could not properly parse data.\n", __LINE__);
-        return out;
-      } else {
-        int id = std::stoi(std::string(cursor.substr(0, s))); 
-        cursor.remove_prefix(s);
-        cursor.remove_prefix(1);
-        Buffer tmp;
-        tmp.lines.clear();
-        while (!cursor.empty()) {
-          if (cursor[0] == '#') {
-            if (cursor.size() > 1 && cursor[1] != '#') {
-              break;
-            }
-            cursor.remove_prefix(1);
-          }
-          auto s = cursor.find('\n');
-          auto a = cursor.substr(0, s);
-          tmp.lines.push_back(std::string(a));
-          cursor.remove_prefix(a.size());
-          if (s != string_view::npos) cursor.remove_prefix(1);
-        }
-        if (tmp.lines.empty()) tmp.lines.push_back("");
-        out.push_back({static_cast<size_t>(id), std::move(tmp)});
-      }
-    } else {
-      fprintf(stderr, "%d: Could not properly parse data.\n", __LINE__);
-      std::cerr << "Rest:\n";
-      std::cerr << cursor << "######||||||####\n";
-      return out;
-    }
-  }
-  // for line in data:
-  return out;
-}
 void SaveFile(const std::vector<IdBuffer>& buffers) {
   std::string out;
   std::stringstream ss(out);
@@ -254,7 +120,11 @@ void SaveFile(const std::vector<IdBuffer>& buffers) {
     std::cerr << "Could not roundtrip!\n";
     std::cerr << ss.str();
   }
-}  
+
+  EmitStream out2;
+  SaveFile(out2.stream(), buffers);
+  out2.write("/dev/shm/silly");
+}
 
 struct WindowState {
   GtkWidget* window;
@@ -290,17 +160,31 @@ struct WindowState {
 
   gboolean ScrollEvent(GdkEventScroll* event);
   gboolean Draw(gui::DrawCtx& cr);
-  gboolean configure_event(GdkEventConfigure* config) { return TRUE; }
+  gboolean configure_event(GdkEventConfigure* config) {
+    if (window_width_ != config->width || window_height_ != config->height) {
+      window_width_ = config->width;
+      window_height_ = config->height;
+      redraw();
+    }
+    return TRUE;
+  }
   gboolean key_press(GdkEventKey* event) {
     auto keyval = event->keyval;
     if (keyval == GDK_KEY_F5) {
-      int status = system("clang-6.0 -o \
-                          /tmp/trampoline_test/entry.so -DSO_NAME='\"so 3\"' -shared -fpic -Wl,-z,defs \
+      fprintf(stderr, "Doing recompile\n");
+      int status = system(".build/rules src/gui ide-dynamic.so");
+      /* clang-6.0 -o \
+                          /tmp/trampoline_test/entry.so \
+                          -shared -fpic -Wl,-z,defs \
                           -lstdc++ -ldl -L . -Wl,-rpath='$ORIGIN' \
                           src/gui/so-handoff-lib.cc \
                           src/gui/so-handle.cc \
-                          src/gui/dlmain.cc src/gui/font-face.cc \
+                          src/gui/dlmain.cc \
+                          src/gui/buffer.cc \
+                          src/gui/font-face.cc \
+                          src/parser/tokenizer_helper.cc \
                           -I src `pkg-config gtk+-3.0 --cflags --libs` -lfontconfig -lfreetype -g");
+                          */
       if (status == 0) {
         // Invoke compile here...
         // Should probably delay this until the end of the event so it can happen
@@ -311,10 +195,10 @@ struct WindowState {
         g_signal_handler_disconnect(window, sig4);
         g_signal_handler_disconnect(window, sig5);
 
-        fprintf(stderr, "[%s] ?? doing load number: %zu\n", SO_NAME, main::GetJumpId());
+        fprintf(stderr, "[so-reloader] ?? doing load number: %zu\n", main::GetJumpId());
         const char* so_name = (main::GetJumpId() % 2) == 0 ? "/tmp/gui-so-red.so" : "/tmp/gui-so-black.so";
-        const char* base_so_name = "/tmp/trampoline_test/entry.so";
-        fprintf(stderr, "[%s] Loading from: %s\n", SO_NAME, so_name);
+        const char* base_so_name = ".build/ide-dynamic.so";
+        fprintf(stderr, "[so-reloader] Loading from: %s\n", so_name);
 
         link(base_so_name, so_name);
         SoHandle handle(so_name, RTLD_NOW | RTLD_LOCAL);
@@ -336,10 +220,11 @@ struct WindowState {
     const auto& lines = buffer.lines;
     auto& pos = cursor;
     auto clip_col = [&]() {
+      // TODO: Do decoration based clipping.
       if (float_pos == string_view::npos) {
         float_pos = pos.col;
       }
-      pos.col = std::min(float_pos, lines[pos.row].size());
+      pos.col = std::min(float_pos, buffers[buffer_id_].lines[pos.row].size());
       float_pos_dirty = false;
     };
     if (keyval >= ' ' && keyval <= '~') {
@@ -352,8 +237,16 @@ struct WindowState {
     } else if (keyval == GDK_KEY_Down && pos.row + 1 < lines.size()) {
       pos.row += 1;
       clip_col();
+    } else if (keyval == GDK_KEY_Down && buffer_id_ + 1 < buffers.size()) {
+      pos.row = 0;
+      buffer_id_ += 1;
+      clip_col();
     } else if (keyval == GDK_KEY_Up && pos.row > 0) {
       pos.row -= 1;
+      clip_col();
+    } else if (keyval == GDK_KEY_Up && buffer_id_ > 0) {
+      buffer_id_ -= 1;
+      pos.row = buffers[buffer_id_].lines.size() - 1;
       clip_col();
     } else if (keyval == GDK_KEY_Return) {
       Insert(buffer, cursor, '\n');
@@ -414,8 +307,11 @@ struct WindowState {
         col_col += 1;
       } else if (keyval == GDK_KEY_Return) {
         if (colon_text == "w") {
-          SaveFile({{100, &buffers[0]}, {101, &buffers[1]}, {102, &buffers[2]}, {103, &buffers[3]}});
-          fprintf(stderr, "TODO: save file\n");
+          std::vector<IdBuffer> buffers_out;
+          for (size_t i = 0; i < buffers.size(); ++i) {
+            buffers_out.push_back({100 + i, &buffers[i]});
+          }
+          SaveFile(buffers_out);
         } else if (colon_text == "s") {
           buffer_id_ = (buffer_id_ + 1) % buffers.size();;
           cursor = {0, 0};
@@ -442,7 +338,7 @@ struct WindowState {
   void redraw() {
     if (!needs_redraw) {
       needs_redraw = true;
-      gtk_widget_queue_draw(drawing_area);
+      gtk_widget_queue_draw(window);
     }
   }
   void InitEvents();
@@ -455,7 +351,6 @@ gboolean WindowState::ScrollEvent(GdkEventScroll* event) {
   } else if (event->direction == GDK_SCROLL_DOWN) {
     scroll -= font->height() * 3;
   }
-  // fprintf(stderr, "scroll: %g\n", scroll);
   if (scroll > 0) { scroll = 0; }
   redraw();
   return TRUE;
@@ -474,7 +369,6 @@ gboolean WindowState::Draw(gui::DrawCtx& cr) {
   } // + buffers[1].lines.size();
   double width = GetLineNumberRenderingWidth(std::max<size_t>(100, num_lines), font);
 
-  // fprintf(stderr, "scroll: %g\n", scroll);
   DoDrawLines(cr, scroll, width, num_lines, window_height_, font);
   gui::Point st {2 + width, 2 + scroll};
 
@@ -576,6 +470,7 @@ void WindowState::InitEvents() {
           return FALSE;
   }), this);
 
+  if (false) {
 
   buffers.emplace_back();
   buffers.emplace_back();
@@ -591,6 +486,15 @@ InitEvents();
 gtk_widget_queue_draw(drawing_area);)");
   Init(buffers[2], "extern \"C\" void dl_plugin_entry()");
   Init(buffers[3], "new WindowState();");
+
+  } else {
+  auto tmp = ParseMultiBuffer(LoadFile("/dev/shm/silly"));
+
+  for (auto& id_b : tmp) {
+    buffers.emplace_back(std::move(id_b.buffer));
+  }
+
+  }
   // What are the things, and how can you compose them?
 }
 
@@ -601,7 +505,7 @@ WindowState::WindowState(GtkWidget* window_inp, GtkWidget* drawing_area_inp,
   window_width_ = width;
   window_height_ = height;
   InitEvents();
-  gtk_widget_queue_draw(drawing_area);
+  gtk_widget_queue_draw(window);
 }
 
 extern "C" void dl_plugin_entry() {

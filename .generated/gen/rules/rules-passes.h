@@ -8,6 +8,7 @@ class RuleModuleContext {
  public:
   RuleFile* GetFile(string_view key);
   LibraryBuildResult* default_flags = MakeDefaultFlags();
+  LibraryBuildResult* so_flags = MakeSoFlags();
   LibraryBuildResult* gtk_flags();
   LibraryBuildResult* dl_flags();
  private:
@@ -23,12 +24,12 @@ class RuleFile {
   RuleModuleContext* parent;
   std::string filename;
   void DoIndex();
-  std::unordered_map<std::string, rule_spec::LinkDecl*> links;
+  std::unordered_map<std::string, rule_spec::Decl*> links;
   std::unordered_map<std::string, rule_spec::Decl*> libs;
   void LinkOrTrigger(string_view rule_name);
   LibraryBuildResult* GetAndRunRule(string_view key);
   void Link(string_view key);
-  rule_spec::LinkDecl* GetLinkDecl(string_view path);
+  rule_spec::Decl* GetLinkDecl(string_view path);
   rule_spec::Decl* GetRuleDecl(string_view path);
  private:
   struct GetAndRunRule_CacheState {

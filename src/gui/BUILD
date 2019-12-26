@@ -1,4 +1,5 @@
 import "src/rules" as rules;
+import "src/parser" as parser;
 
 lib core_gtk_utils {
   srcs = ["font-face.cc"];
@@ -6,9 +7,37 @@ lib core_gtk_utils {
   deps = [gtk];
 }
 
-lib tool {
-  srcs = ["tool.cc"];
-  deps = [gtk, rules.process, rules.clang_error_parse, dl, core_gtk_utils];
+lib buffer {
+  srcs = ["buffer.cc"];
+  hdrs = ["buffer.h"];
+  deps = [
+    parser.tokenizer_helper
+  ];
 }
 
-link "ide-dynamic" { deps = [tool]; }
+lib so_handoff {
+  srcs = ["so-handoff-lib.cc"];
+  hdrs = ["so-handoff-lib.h"];
+  deps = [so_handle, core_gtk_utils];
+}
+
+lib so_handle {
+  srcs = ["so-handle.cc"];
+  hdrs = ["so-handle.h"];
+  deps = [dl];
+}
+
+lib dlmain {
+  srcs = ["dlmain.cc"];
+  deps = [gtk, rules.process, rules.clang_error_parse, core_gtk_utils,
+          parser.tokenizer_helper, buffer, so_handoff];
+}
+
+solink "ide-dynamic.so" { deps = [dlmain]; }
+
+lib main {
+  srcs = ["main.cc"];
+  deps = [dl];
+}
+
+link "gui" { deps = [main]; }

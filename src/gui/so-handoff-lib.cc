@@ -13,7 +13,7 @@ struct BasicState {
   SoHandle next_handle;
   size_t jump_id;
   ~BasicState() {
-    printf("[%s] exiting so file\n", SO_NAME);
+    printf("[so-reloader] exiting so file\n");
     self_handle.release();
   }
 };
