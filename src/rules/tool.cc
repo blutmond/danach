@@ -10,145 +10,15 @@
 #include <algorithm>
 #include "gen/rules/rule-spec.h"
 #include "rules/string-utils.h"
+#include "rules/compiler.h"
 #include "parser/lowering_spec_lowering.h"
 #include "parser/parser_lowering.h"
 #include "rules/emit-passes.h"
 #include "rules/emit-passes-template.h"
 
-struct MkdirCache {
-  std::unordered_set<std::string> mkdirs;
-  void Ensure(const char* fname) {
-    auto key = std::string(fname);
-    if (mkdirs.find(key) == mkdirs.end()) {
-      mkdirs.insert(key);
-      Run({"/bin/mkdir", "-p", fname});
-    }
-  }
-};
-static MkdirCache mkdir;
-
-const char* strdup(std::string str) {
-  return strdup(str.c_str());
-}
-
-const char* strdup(string_view str) {
-  return strdup(std::string(str).c_str());
-}
-
-string_view RemoveExt(string_view filename) {
-  return filename.substr(0, filename.find_last_of("."));
-}
-
-struct LibraryBuildResult {
-  std::vector<const char*> object_files;
-  std::vector<const char*> exposed_headers;
-  std::vector<const char*> link_flags;
-  std::vector<const char*> cxx_flags;
-  std::vector<LibraryBuildResult*> deps;
-};
-
-struct LinkCommand {
-  const char* output_name;
-  std::vector<LibraryBuildResult*> deps;
-};
-
-struct LibraryCommand {
-  std::vector<const char*> object_files;
-  std::vector<const char*> exposed_headers;
-  std::vector<const char*> link_flags;
-  std::vector<const char*> cxx_flags;
-  std::vector<LibraryBuildResult*> deps;
-};
-
-struct VisitorState {
-  std::unordered_set<LibraryBuildResult*> visited;
-  struct WorkItem {
-    LibraryBuildResult* result;
-    size_t idx;
-  };
-  std::vector<LibraryBuildResult*> postorder;
-
-  void add(LibraryBuildResult* item) {
-    if (visited.insert(item).second) {
-      add(item->deps);
-      postorder.push_back(item);
-    }
-  }
-  void add(const std::vector<LibraryBuildResult*>& deps) {
-    for (auto* dep : deps) add(dep);
-  }
-};
-
-std::vector<LibraryBuildResult*> postorder(const std::vector<LibraryBuildResult*>& deps) {
-  VisitorState result;
-  result.add(deps);
-  return std::move(result.postorder);
-}
-
-std::vector<LibraryBuildResult*> toposort(const std::vector<LibraryBuildResult*>& deps) {
-  VisitorState result;
-  result.add(deps);
-  std::reverse(result.postorder.begin(), result.postorder.end());
-  return std::move(result.postorder);
-}
-
-void CollectObjects(const std::vector<LibraryBuildResult*>& deps, std::vector<const char*>* out) {
-  for (auto* dep : deps) {
-    for (auto* object : dep->object_files) {
-      out->push_back(object);
-    }
-  }
-}
-
-void CollectLinkFlags(const std::vector<LibraryBuildResult*>& deps, std::vector<const char*>* out) {
-  for (auto* dep : deps) {
-    for (auto* link_flag : dep->link_flags) {
-      out->push_back(link_flag);
-    }
-  }
-}
-
-void CollectCXXFlags(const std::vector<LibraryBuildResult*>& deps, std::vector<const char*>* out) {
-  for (auto* dep : deps) {
-    for (auto* cxx_flag : dep->cxx_flags) {
-      out->push_back(cxx_flag);
-    }
-  }
-}
-
-void BuildLinkCommand(LinkCommand* cmd) {
-  std::vector<const char*> eval = {"/usr/bin/clang-6.0", "-Wall"};
-  auto toposort_deps = toposort(cmd->deps);
-  CollectObjects(toposort_deps, &eval);
-  CollectLinkFlags(toposort_deps, &eval);
-  eval.push_back("-o");
-  eval.push_back(cmd->output_name);
-  Run(eval);
-}
-
 LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>& deps,
-                                         string_view folder, std::vector<string_view> srcs) {
-  auto* res = new LibraryBuildResult;
-  for (string_view cxx_name : srcs) {
-    std::vector<const char*> eval = {"/usr/bin/ccache", "/usr/bin/clang-6.0", "-Wall", "-std=c++17"};
-    CollectCXXFlags(postorder(deps), &eval);
-    std::string base = std::string(RemoveExt(cxx_name));
-    mkdir.Ensure(strdup((".build/objects/" + std::string(folder))));
-    const char* object_filename = strdup((".build/objects/" + std::string(folder) + "/"
-                                          + base + ".o"));
-    eval.push_back("-MF");
-    eval.push_back(strdup((".build/objects/" + std::string(folder) + "/"
-                           + base + ".d")));
-    eval.push_back("-MD");
-    eval.push_back("-c");
-    eval.push_back(strdup(std::string(folder) + "/" + std::string(cxx_name)));
-    eval.push_back("-o");
-    eval.push_back(object_filename);
-    Run(std::move(eval));
-    res->object_files.push_back(object_filename);
-  }
-  res->deps = deps;
-  return res;
+                                         string_view folder, const std::vector<string_view>& srcs) {
+  return SimpleCompileCXXFile(deps, folder, ".build/objects/" + std::string(folder), srcs);
 }
 
 LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& deps,
@@ -213,21 +83,6 @@ LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResul
   return res;
 }
 
-
-LibraryBuildResult *MakeDefaultFlags() {
-  auto* res = new LibraryBuildResult;
-  res->link_flags = {"-lstdc++"};
-  res->cxx_flags = {"-fpic", "-I", ".generated/", "-I", "src", "-I", ".build/"};
-  return res;
-}
-
-LibraryBuildResult *MakeSoFlags() {
-  auto* res = new LibraryBuildResult;
-  res->link_flags = {"-shared", "-Wl,-z,defs", "-Wl,-rpath='$ORIGIN'"};
-  res->cxx_flags = {};
-  return res;
-}
-
 std::unordered_map<string_view, rule_spec::Option*> IndexOptionSet(
     string_view filename,
     string_view rule_name,
@@ -272,29 +127,9 @@ std::string GetStringOption(rule_spec::Option* option) {
 #include "gen/rules/rules-passes.h"
 namespace rules {
 
-LibraryBuildResult *MakeGtkFlags(RuleModuleContext* ctx) {
-  auto* res = new LibraryBuildResult;
-  res->link_flags = {"-lgtk-3", "-lgdk-3", "-lpangocairo-1.0", "-lpango-1.0",
-    "-latk-1.0", "-lcairo-gobject", "-lcairo",
-      "-lfontconfig",
-      "-lfreetype",
-    "-lgdk_pixbuf-2.0", "-lgio-2.0", "-lgobject-2.0", "-lglib-2.0"};
-  res->cxx_flags = {"-pthread", "-I/usr/include/gtk-3.0", "-I/usr/include/at-spi2-atk/2.0",
-    "-I/usr/include/at-spi-2.0", "-I/usr/include/dbus-1.0",
-    "-I/usr/lib/x86_64-linux-gnu/dbus-1.0/include", "-I/usr/include/gtk-3.0",
-    "-I/usr/include/gio-unix-2.0/", "-I/usr/include/cairo", "-I/usr/include/pango-1.0",
-    "-I/usr/include/harfbuzz", "-I/usr/include/pango-1.0", "-I/usr/include/atk-1.0",
-    "-I/usr/include/cairo", "-I/usr/include/pixman-1", "-I/usr/include/freetype2",
-    "-I/usr/include/libpng16", "-I/usr/include/gdk-pixbuf-2.0", "-I/usr/include/libpng16",
-    "-I/usr/include/glib-2.0", "-I/usr/lib/x86_64-linux-gnu/glib-2.0/include"};
-  return res;
-}
+LibraryBuildResult *MakeGtkFlags(RuleModuleContext* ctx) { return ::MakeGtkFlags(); }
 
-LibraryBuildResult *MakeDLFlags(RuleModuleContext* ctx) {
-  auto* res = new LibraryBuildResult;
-  res->link_flags = {"-ldl"};
-  return res;
-}
+LibraryBuildResult *MakeDLFlags(RuleModuleContext* ctx) { return ::MakeDLFlags(); }
 
 LibraryBuildResult* ProcessLibraryBuildResult(RuleFile* context, rule_spec::Expr* expr) {
   using namespace rule_spec;
@@ -365,7 +200,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto cc_out = GetStringOption(options["cc_out"]);
     std::string h_out = GetStringOption(options["h_out"]);
 
-    mkdir.Ensure(strdup(".generated/" + filename_gen));
+    DoMkdir(strdup(".generated/" + filename_gen));
     auto* res = SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
                                    strdup(filename + "/" + tokenizer),
                                    strdup(".generated/" + filename_gen + "/" + cc_out),
@@ -380,7 +215,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto src = GetStringOption(options["src"]);
     auto cc_out = GetStringOption(options["cc_out"]);
 
-    mkdir.Ensure(strdup(".generated/" + filename_gen));
+    DoMkdir(strdup(".generated/" + filename_gen));
     SimpleOldLoweringSpecGen({parent->default_flags}, strdup(filename + "/" + src),
                              strdup(".generated/" + filename_gen + "/" + cc_out));
 
@@ -406,7 +241,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto src = GetStringOption(options["src"]);
 
 
-    mkdir.Ensure(strdup(".generated/" + filename_gen));
+    DoMkdir(strdup(".generated/" + filename_gen));
     passes_template::EmitPassesTemplateToFilename(
         strdup(filename + "/" + src),
         strdup(".generated/" + filename_gen + "/" + cc_out),
@@ -420,7 +255,7 @@ LibraryBuildResult* DoGetAndRunRule(RuleFile* context, string_view rule_name) {
     auto cc_out = GetStringOption(options["cc_out"]);
     std::string h_out = GetStringOption(options["h_out"]);
 
-    mkdir.Ensure(strdup(".generated/" + filename_gen));
+    DoMkdir(strdup(".generated/" + filename_gen));
     passes::EmitPassesToFilename(
         strdup(".generated/" + filename_gen + "/" + cc_out),
         strdup(".generated/" + filename_gen + "/" + h_out));
@@ -471,11 +306,11 @@ int main(int argc, char **argv) {
   }
 
   rules::RuleModuleContext rule_set;
-  // TODO: This is getting out of hand...
   rule_set.GetFile(argv[1])->LinkOrTrigger(argv[2]);
   // TODO: Remove this at some point (These are for linker errors).
   if (argv[2] == string_view("rules-dynamic")) {
-    Run({"/bin/mv", ".build/rules-dynamic", ".build/rules"});
+    RunTrace({"/bin/mv", ".build/rules-dynamic", ".build/rules"});
+    EmitCompilerTrace("tools/bootstrapping.sh");
   }
 
   fprintf(stderr, "\e[32mSuccess!\e[m\n");

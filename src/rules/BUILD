@@ -12,6 +12,12 @@ lib process {
   hdrs = ["process.h"];
 }
 
+lib compiler {
+  srcs = ["compiler.cc"];
+  hdrs = ["compiler.h"];
+  deps = [process];
+}
+
 lib string_utils {
   srcs = ["string-utils.cc"];
   hdrs = ["string-utils.h"];
@@ -58,7 +64,7 @@ lib tool {
           string_utils,
           parser.parser_lowering,
           parser.lowering_spec_lowering,
-          parser.tokenizer_helper];
+          parser.tokenizer_helper, compiler];
 }
 
 link "rules-dynamic" { deps = [tool]; }

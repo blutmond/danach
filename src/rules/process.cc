@@ -52,11 +52,13 @@ int WaitFor(pid_t cpid) {
 void WaitForAssert(pid_t cpid) { AssertWStatus(WaitFor(cpid)); }
 
 void Run(const char *argv[]) {
+  /*
   for (int i = 0;argv[i]; ++i) {
     if (i != 0) printf(" ");
     printf("%s", argv[i]);
   }
   printf("\n");
+  */
   WaitForAssert(RunPid(argv));
 }
 
@@ -89,11 +91,13 @@ pid_t RunPidWithPipe(const char *argv[], int out_fd, int err_fd,
 
 void RunWithPipe(std::vector<const char*> argv, const char* out_filename) {
   argv.push_back(nullptr);
+  /*
   for (int i = 0;argv[i]; ++i) {
     if (i != 0) printf(" ");
     printf("%s", argv[i]);
   }
   printf(" > %s\n", out_filename);
+  */
 
   int out_fd = creat(out_filename, S_IRUSR | S_IWUSR);
   if (out_fd == -1) {
