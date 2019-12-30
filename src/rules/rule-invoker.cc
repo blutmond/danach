@@ -76,10 +76,9 @@ LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>&
   return SimpleCompileCXXFile(deps, folder, ".build/objects/" + std::string(folder), srcs);
 }
 
-LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& deps,
-                                       const char* parser, const char* tokenizer,
-                                       const char* outname, const char* h_outname,
-                                       string_view folder, string_view cxx_name) {
+void EmitParserGen(const char* parser, const char* tokenizer,
+                   std::ostream& h_stream,
+                   std::ostream& cc_stream) {
   auto contents = LoadFile(parser);
   auto contents_tok = LoadFile(tokenizer);
 
@@ -92,22 +91,8 @@ LibraryBuildResult *SimpleOldParserGen(const std::vector<LibraryBuildResult*>& d
   auto* ctx = parser::DoAnalysis(m, m2);
   
   // Actual Emit...
-  {
-    EmitStream stream;
-    parser::EmitParser(stream.stream(), m, m2, ctx, /* is_header= */ false);
-    stream.write(outname);
-  }
-  
-  if (h_outname) {
-    EmitStream stream;
-    parser::EmitParser(stream.stream(), m, m2, ctx, /* is_header= */ true);
-    stream.write(h_outname);
-    return SimpleCompileCXXFile(deps, folder, {cxx_name}); 
-  }
-
-  auto* res = new LibraryBuildResult;
-  res->deps = deps;
-  return res;
+  parser::EmitParser(cc_stream, m, m2, ctx, /* is_header= */ false);
+  parser::EmitParser(h_stream, m, m2, ctx, /* is_header= */ true);
 }
 
 LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResult*>& deps,
@@ -182,13 +167,15 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldParse
   std::string h_out = GetStringOption(options["h_out"]);
 
   DoMkdir(strdup(".generated/" + filename_gen));
-  auto* res = SimpleOldParserGen({parent->default_flags}, strdup(filename + "/" + parser),
-                                 strdup(filename + "/" + tokenizer),
-                                 strdup(".generated/" + filename_gen + "/" + cc_out),
-                                 strdup(".generated/" + filename_gen + "/" + h_out),
-                                 ".generated/" + filename_gen, cc_out);
+  EmitStream h_stream;
+  EmitStream cc_stream;
+  EmitParserGen(strdup(filename + "/" + parser),
+                strdup(filename + "/" + tokenizer), h_stream.stream(), cc_stream.stream());
+  cc_stream.write(".generated/" + filename_gen + "/" + cc_out);
+  h_stream.write(".generated/" + filename_gen + "/" + h_out);
+  return SimpleCompileCXXFile({parent->default_flags, parent->GetRule("src/parser", "tokenizer_helper")},
+                              ".generated/" + filename_gen, {cc_out}); 
 
-  return res;
 }
 LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldLoweringSpecDecl* decl) {
   auto filename_gen = GetGeneratedFilename();

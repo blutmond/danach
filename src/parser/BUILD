@@ -16,7 +16,7 @@ old_lowering_spec emit_lowering_spec {
 lib lowering_spec_lowering {
   srcs = ["lowering_spec_lowering.cc"];
   hdrs = ["lowering_spec_lowering.h"];
-  deps = [lowering_spec, emit_lowering_spec, tokenizer_helper];
+  deps = [lowering_spec, emit_lowering_spec];
 }
 
 lib lowering_spec_tool {
@@ -74,7 +74,7 @@ lib parser_lowering {
     patterns.emit_parser,
     patterns.type_check,
     patterns.lower_and_merge,
-    lower_parser_to_functions, regex_passes, tokenizer_helper
+    lower_parser_to_functions, regex_passes
   ];
 }
 

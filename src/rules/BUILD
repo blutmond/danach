@@ -53,9 +53,7 @@ lib rule_invoker {
   deps = [string_utils, compiler,
           parser.parser_lowering,
           parser.lowering_spec_lowering,
-          rule_spec,
-          parser.tokenizer_helper
-          ];
+          rule_spec];
 }
 
 lib tool {
