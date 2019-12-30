@@ -34,12 +34,6 @@ lib emit_passes {
   deps = [emit_passes_meta];
 }
 
-passes_meta emit_passes_meta {
-  src = "emit-passes-meta";
-  cc_out = "emit-passes-meta.cc";
-  h_out = "emit-passes-meta.h";
-}
-
 lib emit_passes_template {
   srcs = ["emit-passes-template.cc"];
   hdrs = ["emit-passes-template.h"];
@@ -53,19 +47,20 @@ old_parser interface {
   h_out = "interface.h";
 }
 
-passes rules_passes {
-  cc_out = "rules-passes.cc";
-  h_out = "rules-passes.h";
+lib rule_invoker {
+  srcs = ["rule-invoker.cc"];
+  hdrs = ["rule-invoker.h"];
+  deps = [string_utils, compiler,
+          parser.parser_lowering,
+          parser.lowering_spec_lowering,
+          rule_spec,
+          parser.tokenizer_helper
+          ];
 }
 
 lib tool {
   srcs = ["tool.cc"];
-  deps = [rule_spec, process, emit_passes, rules_passes, emit_passes_template,
-          string_utils,
-          parser.parser_lowering,
-          parser.lowering_spec_lowering,
-          parser.tokenizer_helper, compiler];
+  deps = [rule_invoker];
 }
 
 link "rules-dynamic" { deps = [tool]; }
-link "rules-passes" { deps = [tool2]; }
