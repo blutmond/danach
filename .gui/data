@@ -1,0 +1,110 @@
+#0
+emit_file "ide-gen/gen-0.h" {
+  pragma_once;
+  hdr_chunk 1;
+  hdr_chunk 2;
+  fwd_declare_func 3;
+  fwd_declare_func 6;
+}
+
+emit_file "ide-gen/gen-0.cc" {
+  import "ide-gen/gen-0.h";
+  hdr_chunk 5;
+  define_func 3, 4;
+  define_func 6, 7;
+}
+
+emit_file "ide-gen/gen-1.cc" {
+  import "ide-gen/gen-0.h";
+  hdr_chunk 8;
+  hdr_chunk 9;
+  define_func 10, 11;
+}
+#1
+##include "gui/buffer.h"
+#2
+struct CollapsedBuffer {
+  size_t id;
+  std::string text;
+};
+#3
+std::vector<CollapsedBuffer> Collapse(const std::vector<ParsedIdBuffer>& src)
+#4
+std::vector<CollapsedBuffer> out;
+for (const auto& buff : src) out.push_back({buff.id, Collapse(buff.buffer)});
+return out;
+#5
+##include "rules/template-support.h"
+##include "rules/string-utils.h"
+##include "gen/gui/emit_manifest.h"
+##include <assert.h>
+#6
+void EmitFromMultiBuffer()
+#7
+using namespace emit_manifest;
+auto tmp = Collapse(ParseMultiBuffer(LoadFile(".gui/data")));
+emit_manifest::Tokenizer tokens(tmp[0].text.c_str());
+auto get_chunk = [&](ChunkSrc* src) -> const std::string& {
+  int id = stoi(std::string(src->id.str));
+  assert(id >= 0 && id < tmp.size());
+  return tmp[id].text;
+};
+Module* m = emit_manifest::parser::DoParse(tokens);
+for (EmitFileDecl* emit_file : m->decls) {
+  EmitStream stream;
+  for (Action* action_ : emit_file->actions) {
+    switch (action_->getKind()) {
+    case Action::Kind::PragmaOnce: {
+      stream.stream() << "#pragma once\n\n";
+      break;
+    } case Action::Kind::Import: {
+      auto* action = reinterpret_cast<ImportAction*>(action_);
+      stream.stream() << "#include " << action->filename.str << "\n";
+      break;
+    } case Action::Kind::HdrChunk: {
+      auto* action = reinterpret_cast<HdrChunkAction*>(action_);
+      stream.stream() << get_chunk(action->id) << "\n";
+      break;
+    } case Action::Kind::FwdDeclareFunc: {
+      auto* action = reinterpret_cast<FwdDeclareFuncAction*>(action_);
+      stream.stream() << get_chunk(action->id) << ";\n";
+      break;
+    } case Action::Kind::DefineFunc: {
+      auto* action = reinterpret_cast<DefineFuncAction*>(action_);
+      stream.stream() << get_chunk(action->sig_id) << " {\n";
+      stream.stream() << get_chunk(action->body_id) << "\n}\n";
+      break;
+    }
+    }
+  }
+  stream.write(std::string(".generated/") + Unescaped(emit_file->filename.str));
+}
+#8
+##include "rules/rule-invoker.h"
+#9
+##include <stdio.h>
+##include <stdlib.h>
+#10
+int main()
+#11
+EmitFromMultiBuffer();
+
+rules::GlobalContext ctx;
+
+auto* dep1 = ctx.GetRule("src/gui", "buffer");
+auto* dep2 = ctx.GetRule("src/rules", "rule_invoker");
+auto* dep3 = ctx.GetRule("src/gui", "emit_manifest");
+
+auto* obj = SimpleCompileCXXFile({ctx.default_flags, dep1, dep2, dep3},
+                                 ".generated/ide-gen",
+                                 ".build/objects/ide-gen", {"gen-1.cc", "gen-0.cc"});
+
+LinkCommand cmd;
+cmd.deps.push_back(obj);
+cmd.output_name = ".build/run-buffer-tests-dynamic";
+BuildLinkCommand(&cmd);
+
+RunTrace({"/bin/mv", ".build/run-buffer-tests-dynamic", ".build/run-buffer-tests"});
+EmitCompilerTrace("tools/gui-test-bootstrapping.sh");
+
+fprintf(stderr, "\e[32mSuccess!\e[m\n");

@@ -70,7 +70,8 @@ void FlushLineWithCursor(gui::DrawCtx& cr, gui::Point st, gui::FontLayoutFace* f
 
     cr.set_source_rgb(1.0, 1.0, 0.0);
     cr.rectangle(gui::Point{glyphs[col].x, st.y},
-                 {glyphs[col + 1].x - glyphs[col].x, font->height()});
+                 {(col + 1 == glyphs.size() ? st.x : glyphs[col + 1].x) - glyphs[col].x,
+                  font->height()});
     cr.fill();
 
     cr.set_source_rgb(0.0, 0.0, 0.0);
@@ -123,7 +124,7 @@ void SaveFile(const std::vector<IdBuffer>& buffers) {
 
   EmitStream out2;
   SaveFile(out2.stream(), buffers);
-  out2.write("/dev/shm/silly");
+  out2.write(".gui/data");
 }
 
 struct WindowState {
@@ -309,9 +310,22 @@ struct WindowState {
         if (colon_text == "w") {
           std::vector<IdBuffer> buffers_out;
           for (size_t i = 0; i < buffers.size(); ++i) {
-            buffers_out.push_back({100 + i, &buffers[i]});
+            buffers_out.push_back({i, &buffers[i]});
           }
           SaveFile(buffers_out);
+        } else if (colon_text == "t") {
+          fprintf(stderr, "--------Eval--------\n");
+          std::vector<IdBuffer> buffers_out;
+          for (size_t i = 0; i < buffers.size(); ++i) {
+            buffers_out.push_back({i, &buffers[i]});
+          }
+          SaveFile(buffers_out);
+
+          if (system(".build/run-buffer-tests") == 0) {
+            fprintf(stderr, "... Test Success ...\n");
+          } else {
+            fprintf(stderr, "... Test Failure ...\n");
+          }
         } else if (colon_text == "s") {
           buffer_id_ = (buffer_id_ + 1) % buffers.size();;
           cursor = {0, 0};
@@ -488,7 +502,7 @@ gtk_widget_queue_draw(drawing_area);)");
   Init(buffers[3], "new WindowState();");
 
   } else {
-  auto tmp = ParseMultiBuffer(LoadFile("/dev/shm/silly"));
+  auto tmp = ParseMultiBuffer(LoadFile(".gui/data"));
 
   for (auto& id_b : tmp) {
     buffers.emplace_back(std::move(id_b.buffer));

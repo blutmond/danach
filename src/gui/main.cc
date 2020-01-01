@@ -8,7 +8,7 @@ struct Trampoline {
 };
 
 int main(int argc, char **argv) {
-  const char* filename = "/tmp/trampoline_test/entry.so";
+  const char* filename = ".build/ide-dynamic.so";
   void* handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
   if (!handle) { fprintf(stderr, "dlopen(%s): %s\n", filename, dlerror()); exit(EXIT_FAILURE); }
 

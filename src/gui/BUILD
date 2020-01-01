@@ -15,6 +15,13 @@ lib buffer {
   ];
 }
 
+old_parser emit_manifest {
+  parser = "syntax/manifest-parser";
+  tokens = "syntax/manifest-tokenizer";
+  cc_out = "emit_manifest.cc";
+  h_out = "emit_manifest.h";
+}
+
 lib so_handoff {
   srcs = ["so-handoff-lib.cc"];
   hdrs = ["so-handoff-lib.h"];

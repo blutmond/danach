@@ -43,3 +43,5 @@ struct ParsedIdBuffer {
   }
 };
 std::vector<ParsedIdBuffer> ParseMultiBuffer(string_view data);
+
+std::string Collapse(const Buffer& buffer);

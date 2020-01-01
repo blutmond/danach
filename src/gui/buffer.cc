@@ -116,3 +116,11 @@ std::vector<ParsedIdBuffer> ParseMultiBuffer(string_view data) {
   return out;
 }
 
+std::string Collapse(const Buffer& buffer) {
+  std::string text;
+  for (const auto& line : buffer.lines) {
+    text += line;
+    text += "\n";
+  }
+  return text;
+}

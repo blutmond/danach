@@ -1,0 +1,20 @@
+module emit_manifest;
+
+entry Module;
+tokenizer basic;
+
+define ChunkSrc { %id = number }
+
+production Action {
+  pattern PragmaOnce { "pragma_once" ";" }
+  pattern Import { "import" %filename = str ";" }
+  pattern HdrChunk { "hdr_chunk" %id = ChunkSrc ";" }
+  pattern FwdDeclareFunc { "fwd_declare_func" %id = ChunkSrc ";" }
+  pattern DefineFunc { "define_func" %sig_id = ChunkSrc "," %body_id = ChunkSrc ";" }
+}
+
+define EmitFileDecl { "emit_file" %filename = str "{" %actions = concat { Action } "}" }
+
+define Module {
+  %decls = concat { EmitFileDecl }
+}
