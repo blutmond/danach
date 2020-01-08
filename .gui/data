@@ -1,46 +1,63 @@
 #0
 emit_file "ide-gen/gen-0.h" {
   pragma_once;
-  hdr_chunk 1;
   hdr_chunk 2;
-  fwd_declare_func 3;
-  fwd_declare_func 6;
+  hdr_chunk 3;
+  fwd_declare_func 4;
+  fwd_declare_func 7;
 }
 
 emit_file "ide-gen/gen-0.cc" {
   import "ide-gen/gen-0.h";
-  hdr_chunk 5;
-  define_func 3, 4;
-  define_func 6, 7;
+  hdr_chunk 6;
+  define_func 4, 5;
+  define_func 7, 8;
 }
 
 emit_file "ide-gen/gen-1.cc" {
   import "ide-gen/gen-0.h";
-  hdr_chunk 8;
   hdr_chunk 9;
-  define_func 10, 11;
+  hdr_chunk 10;
+  define_func 11, 12;
 }
 #1
-##include "gui/buffer.h"
+view "Metadata" {
+  raw 0;
+  raw 1;
+}
+view "Collapse" {
+  raw 2;
+  raw 3;
+  func 4, 5;
+  raw 6;
+  func 7, 8;
+}
+view "Main" {
+  raw 9;
+  raw 10;
+  func 11, 12;
+}
 #2
+##include "gui/buffer.h"
+#3
 struct CollapsedBuffer {
   size_t id;
   std::string text;
 };
-#3
-std::vector<CollapsedBuffer> Collapse(const std::vector<ParsedIdBuffer>& src)
 #4
+std::vector<CollapsedBuffer> Collapse(const std::vector<ParsedIdBuffer>& src)
+#5
 std::vector<CollapsedBuffer> out;
 for (const auto& buff : src) out.push_back({buff.id, Collapse(buff.buffer)});
 return out;
-#5
+#6
 ##include "rules/template-support.h"
 ##include "rules/string-utils.h"
 ##include "gen/gui/emit_manifest.h"
 ##include <assert.h>
-#6
-void EmitFromMultiBuffer()
 #7
+void EmitFromMultiBuffer()
+#8
 using namespace emit_manifest;
 auto tmp = Collapse(ParseMultiBuffer(LoadFile(".gui/data")));
 emit_manifest::Tokenizer tokens(tmp[0].text.c_str());
@@ -79,14 +96,14 @@ for (EmitFileDecl* emit_file : m->decls) {
   }
   stream.write(std::string(".generated/") + Unescaped(emit_file->filename.str));
 }
-#8
-##include "rules/rule-invoker.h"
 #9
+##include "rules/rule-invoker.h"
+#10
 ##include <stdio.h>
 ##include <stdlib.h>
-#10
-int main()
 #11
+int main()
+#12
 EmitFromMultiBuffer();
 
 rules::GlobalContext ctx;

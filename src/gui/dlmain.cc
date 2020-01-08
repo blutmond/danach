@@ -4,127 +4,21 @@
 #include "gui/buffer.h"
 #include "rules/template-support.h"
 #include "parser/parser-support.h"
+#include "gui/buffer-edit.h"
+#include "gui/buffer-view.h"
+#include "gen/gui/view_manifest.h"
 
 #include <iostream>
 #include <sstream>
+#include <assert.h>
 #include <gtk/gtk.h>
 
-double GetLineNumberRenderingWidth(size_t n_lines, gui::FontLayoutFace* font) {
-  double max_width = 0.0;
-  for (int i = '0'; i <= '9'; ++i) {
-    max_width = std::max(max_width, font->GetWidth(font->GetGlyph(i)));
-  }
-  n_lines = std::max<size_t>(1, n_lines);
-  size_t log_10 = 0;
-  for (; n_lines > 0; n_lines /= 10) ++log_10;
-  return max_width * log_10 + 4;
-}
-
-void LayoutLineNumbers(gui::Point st, std::vector<cairo_glyph_t>& glyphs,
-                       gui::FontLayoutFace* font, size_t i, double width) {
-  char line_numbers[100];
-  size_t ln_width = 0;
-  for (size_t i_copy = i; i_copy > 0; i_copy /= 10) {
-    ++ln_width;
-    line_numbers[100 - ln_width] = '0' + (i_copy % 10);
-  }
-
-  font->LayoutWrap(st, glyphs, string_view(&line_numbers[100 - ln_width], ln_width));
-  double extra = (width - 2) - st.x;
-  for (auto& glyph : glyphs) glyph.x += extra;
-}
-
-void LayoutTwidle(gui::Point st, std::vector<cairo_glyph_t>& glyphs,
-                  gui::FontLayoutFace* font) {
-  char twidle[] = {'~'};
-  font->LayoutWrap(st, glyphs, string_view(twidle, 1));
-}
-
-void DoDrawLines(gui::DrawCtx& cr, double scroll,
-                 double width, size_t num_lines, size_t window_height,
-                 gui::FontLayoutFace* font) {
-  gui::Point st {2,2};
-  std::vector<cairo_glyph_t> glyphs;
-  st.y += scroll;
-  size_t i = 1;
-  if (st.y < 0) {
-    size_t n_hidden = static_cast<size_t>(-st.y / font->height()); 
-    st.y += font->height() * n_hidden;
-    i += n_hidden;
-  }
-  while (st.y < window_height) {
-    glyphs.clear();
-    if (i <= num_lines) LayoutLineNumbers(st, glyphs, font, i, width);
-    else LayoutTwidle(st, glyphs, font);
-    font->Flush(cr, glyphs);
-    st.y += font->height();
-    i += 1;
-  }
-}
-
-void FlushLineWithCursor(gui::DrawCtx& cr, gui::Point st, gui::FontLayoutFace* font,
-                         std::vector<cairo_glyph_t>& glyphs, size_t col) {
-  font->Flush(cr, glyphs.data(), col);
-  if (col < glyphs.size()) {
-    font->Flush(cr, glyphs.data() + (col + 1), glyphs.size() - col - 1);
-
-    cr.set_source_rgb(1.0, 1.0, 0.0);
-    cr.rectangle(gui::Point{glyphs[col].x, st.y},
-                 {(col + 1 == glyphs.size() ? st.x : glyphs[col + 1].x) - glyphs[col].x,
-                  font->height()});
-    cr.fill();
-
-    cr.set_source_rgb(0.0, 0.0, 0.0);
-    cairo_show_glyphs(cr.cr(), glyphs.data() + col, 1);
-    cr.set_source_rgb(1.0, 1.0, 0.0);
-  } else {
-    cr.set_source_rgb(1.0, 1.0, 0.0);
-    cr.rectangle(st, {9, font->height()});
-    cr.fill();
-  }
-}
-
-void DrawBuffer(gui::DrawCtx& cr, gui::Point st, const Buffer& buffer, BufferPos* cursor) {
-  auto* font = gui::DefaultFont();
-  std::vector<cairo_glyph_t> glyphs;
-  size_t pos_row = cursor ? cursor->row : 0;
-  cr.set_source_rgb(1.0, 1.0, 0.0);
-  auto original_x = st.x;
-  size_t row = 0;
-  const auto& lines = buffer.lines;
-  for (auto& line: buffer.lines) {
-    glyphs.clear();
-    font->LayoutWrap(st, glyphs, line);
-    if (row == pos_row && cursor) {
-      FlushLineWithCursor(cr, st, font, glyphs, cursor->col);
-    } else {
-      font->Flush(cr, glyphs);
-    }
-    st.y += font->height();
-    st.x = original_x;
-    ++row;
-  }
-}
+#define MULTIBUFFER_FILENAME ".gui/data"
 
 void SaveFile(const std::vector<IdBuffer>& buffers) {
-  std::string out;
-  std::stringstream ss(out);
-  SaveFile(ss, buffers);
-  ss.flush();
-  // std::cerr << ss.str();
-  auto tmp = ParseMultiBuffer(ss.str());
-  std::vector<ParsedIdBuffer> copy;
-  for (auto& t : buffers) {
-    copy.push_back({t.id, *t.buffer});
-  }
-  if (tmp != copy) {
-    std::cerr << "Could not roundtrip!\n";
-    std::cerr << ss.str();
-  }
-
   EmitStream out2;
   SaveFile(out2.stream(), buffers);
-  out2.write(".gui/data");
+  out2.write(MULTIBUFFER_FILENAME);
 }
 
 struct WindowState {
@@ -134,8 +28,6 @@ struct WindowState {
   size_t window_width_ = 1024 * 3 / 2;
   size_t window_height_ = 680 * 3 / 2;
 
-  double scroll = 0.0;
-
   enum class Mode {
     INSERT,
     ESCAPE,
@@ -143,17 +35,19 @@ struct WindowState {
   };
   Mode mode = Mode::INSERT;
 
-  BufferPos cursor {0, 0};
-  size_t buffer_id_ = 0;
   std::string colon_text;
   size_t col_col = 0;
-  std::vector<Buffer> buffers;
+
+  std::vector<std::unique_ptr<Buffer>> buffers;
+  size_t view_id_ = 0;
+  std::vector<ChunkView> views;
 
   gulong sig1;
   gulong sig2;
   gulong sig3;
   gulong sig4;
   gulong sig5;
+  gulong sig6;
 
   WindowState();
   WindowState(GtkWidget* window, GtkWidget* drawing_area,
@@ -195,6 +89,7 @@ struct WindowState {
         g_signal_handler_disconnect(drawing_area, sig3);
         g_signal_handler_disconnect(window, sig4);
         g_signal_handler_disconnect(window, sig5);
+        g_signal_handler_disconnect(window, sig6);
 
         fprintf(stderr, "[so-reloader] ?? doing load number: %zu\n", main::GetJumpId());
         const char* so_name = (main::GetJumpId() % 2) == 0 ? "/tmp/gui-so-red.so" : "/tmp/gui-so-black.so";
@@ -216,75 +111,15 @@ struct WindowState {
     }
 
     if (mode == Mode::INSERT) {
-    auto& buffer = buffers[buffer_id_];
-    bool float_pos_dirty = true;
-    const auto& lines = buffer.lines;
-    auto& pos = cursor;
-    auto clip_col = [&]() {
-      // TODO: Do decoration based clipping.
-      if (float_pos == string_view::npos) {
-        float_pos = pos.col;
-      }
-      pos.col = std::min(float_pos, buffers[buffer_id_].lines[pos.row].size());
-      float_pos_dirty = false;
-    };
-    if (keyval >= ' ' && keyval <= '~') {
-      Insert(buffer, cursor, keyval);
-    } else if (keyval == GDK_KEY_Left && pos.col > 0) {
-      pos.col -= 1;
-    } else if (keyval == GDK_KEY_Right && 
-               pos.col < lines[pos.row].size()) {
-      pos.col += 1;
-    } else if (keyval == GDK_KEY_Down && pos.row + 1 < lines.size()) {
-      pos.row += 1;
-      clip_col();
-    } else if (keyval == GDK_KEY_Down && buffer_id_ + 1 < buffers.size()) {
-      pos.row = 0;
-      buffer_id_ += 1;
-      clip_col();
-    } else if (keyval == GDK_KEY_Up && pos.row > 0) {
-      pos.row -= 1;
-      clip_col();
-    } else if (keyval == GDK_KEY_Up && buffer_id_ > 0) {
-      buffer_id_ -= 1;
-      pos.row = buffers[buffer_id_].lines.size() - 1;
-      clip_col();
-    } else if (keyval == GDK_KEY_Return) {
-      Insert(buffer, cursor, '\n');
-    } else if (keyval == GDK_KEY_BackSpace &&
-               (pos.row > 0 || pos.col > 0)) {
-      auto new_pos = pos;
-      if (new_pos.col == 0) {
-        new_pos.row -= 1;
-        new_pos.col = lines[new_pos.row].size();
+      if (DoKeyPress(views[view_id_], keyval)) {
+      } else if (keyval == GDK_KEY_Escape) {
+        mode = Mode::ESCAPE;
       } else {
-        new_pos.col -= 1;
+        fprintf(stderr, "unknown keyval: %d, %s\n", keyval, gdk_keyval_name(keyval));
+        return FALSE;
       }
-      Delete(buffer, new_pos, pos);
-      pos = new_pos;
-    } else if (keyval == GDK_KEY_Delete &&
-               (pos.col < lines[pos.row].size() || pos.row + 1 < lines.size())) {
-      auto new_pos = pos;
-      if (new_pos.col == lines[pos.row].size()) {
-        new_pos.row += 1;
-        new_pos.col = 0;
-      } else {
-        new_pos.col += 1;
-      }
-      Delete(buffer, pos, new_pos);
-    } else if (keyval == GDK_KEY_Home) {
-      pos.col = 0;
-    } else if (keyval == GDK_KEY_End) {
-      pos.col = lines[pos.row].size();
-    } else if (keyval == GDK_KEY_Escape) {
-      mode = Mode::ESCAPE;
-    } else {
-      fprintf(stderr, "unknown keyval: %d, %s\n", keyval, gdk_keyval_name(keyval));
+      redraw();
       return FALSE;
-    }
-    if (float_pos_dirty) float_pos = string_view::npos;
-    redraw();
-    return FALSE;
     } else if (mode == Mode::ESCAPE) {
       if (keyval == 'i') {
         mode = Mode::INSERT;
@@ -310,14 +145,14 @@ struct WindowState {
         if (colon_text == "w") {
           std::vector<IdBuffer> buffers_out;
           for (size_t i = 0; i < buffers.size(); ++i) {
-            buffers_out.push_back({i, &buffers[i]});
+            buffers_out.push_back({i, buffers[i].get()});
           }
           SaveFile(buffers_out);
         } else if (colon_text == "t") {
           fprintf(stderr, "--------Eval--------\n");
           std::vector<IdBuffer> buffers_out;
           for (size_t i = 0; i < buffers.size(); ++i) {
-            buffers_out.push_back({i, &buffers[i]});
+            buffers_out.push_back({i, buffers[i].get()});
           }
           SaveFile(buffers_out);
 
@@ -326,9 +161,6 @@ struct WindowState {
           } else {
             fprintf(stderr, "... Test Failure ...\n");
           }
-        } else if (colon_text == "s") {
-          buffer_id_ = (buffer_id_ + 1) % buffers.size();;
-          cursor = {0, 0};
         } else {
           fprintf(stderr, "Unknown command: %s\n", colon_text.c_str());
         }
@@ -347,7 +179,75 @@ struct WindowState {
     }
   }
 
-  size_t float_pos = string_view::npos;
+  uint32_t press_time = -1;
+  gboolean ButtonPress(GdkEventButton* button) {
+    gui::Point pt{button->x, button->y};
+
+    if (pt.x < 300) {
+    auto* font = gui::DefaultFont();
+
+    std::vector<cairo_glyph_t> glyphs;
+    gui::Point opt {2, 2};
+    
+    for (size_t i = 0; i < views.size(); ++i) {
+      gui::Point st = opt;
+      glyphs.clear();
+      font->LayoutWrap(st, glyphs, "- ", 12, 300.0 - 2);
+      font->LayoutWrap(st, glyphs, views[i].title, 12, 300.0 - 2);
+      opt.y = st.y + font->height() + 10;
+      if (pt.y < opt.y) {
+        fprintf(stderr, "Going to view %zu\n", i);
+        view_id_ = i;
+        views[view_id_].SanitizeCursor();
+        redraw();
+        return TRUE;
+      }
+    }
+
+      return FALSE;
+    }
+    auto* font = gui::DefaultFont();
+
+    auto& view = views[view_id_];
+    auto& buffer_id_ = view.buffer_id_;
+    auto& buffers = view.buffers;
+    auto& gaps = view.gaps;
+    auto& decorations = view.decorations;
+    auto& cursor = view.cursor;
+    auto& scroll = view.scroll;
+
+    size_t num_lines = 0;
+    for (size_t i = 0; i < buffers.size(); ++i) {
+      num_lines += buffers[i]->lines.size();
+    } // + buffers[1].lines.size();
+    double width = GetLineNumberRenderingWidth(std::max<size_t>(100, num_lines), font);
+
+    gui::Point st {2 + width, 2 + scroll};
+
+    for (size_t i = 0; i < buffers.size(); ++i) {
+      const auto& buffer = *buffers[i];
+      // auto& decoration = decorations[i];
+      if (i > 0) st.y += gaps[i - 1];
+      st.x = 2 + width;
+      decorations[i].Adjust(st, font->height(), buffer.lines.size());
+      double segment_height = font->height() * buffer.lines.size();
+
+      size_t click_line = 0;
+      if (pt.y > st.y) {
+        click_line = static_cast<ssize_t>((pt.y - st.y) / font->height());
+      }
+      if (click_line < buffer.lines.size()) {
+        cursor.col = 0;
+        cursor.row = click_line;
+        buffer_id_ = i;
+        redraw();
+        return TRUE;
+      }
+      st.y += segment_height;
+    }
+    return FALSE;
+  }
+
   bool needs_redraw = true;
   void redraw() {
     if (!needs_redraw) {
@@ -359,6 +259,7 @@ struct WindowState {
 };
 
 gboolean WindowState::ScrollEvent(GdkEventScroll* event) {
+  auto& scroll = views[view_id_].scroll;
   auto* font = gui::DefaultFont();
   if (event->direction == GDK_SCROLL_UP) {
     scroll += font->height() * 3;
@@ -377,30 +278,30 @@ gboolean WindowState::Draw(gui::DrawCtx& cr) {
   cr.set_source_rgb(1.0, 0.0, 0.0);
   auto* font = gui::DefaultFont();
 
-  size_t num_lines = 0;
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    num_lines += buffers[i].lines.size();
-  } // + buffers[1].lines.size();
-  double width = GetLineNumberRenderingWidth(std::max<size_t>(100, num_lines), font);
-
-  DoDrawLines(cr, scroll, width, num_lines, window_height_, font);
-  gui::Point st {2 + width, 2 + scroll};
-
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    if ((i % 2) == 1) {
-      // st.y += font->height() / 2;
-      st.x = 2 + width + 20;
-      cr.move_to({width + 15, st.y + 6});
-      cr.line_to({width + 15, st.y + font->height() * buffers[i].lines.size()});
-      cr.stroke();
-    } else {
-      st.x = 2 + width;
-    }
+  {
+    std::vector<cairo_glyph_t> glyphs;
+    gui::Point opt {2, 2};
     
-    DrawBuffer(cr, st, buffers[i], buffer_id_ == i ? &cursor : nullptr);
-    st.y += font->height() * buffers[i].lines.size();
+    cr.set_source_rgb(0.5, 1.0, 1.0);
+
+    for (size_t i = 0; i < views.size(); ++i) {
+      gui::Point st = opt;
+      glyphs.clear();
+      if (i == view_id_) {
+        font->LayoutWrap(st, glyphs, "x ", 12, 300.0 - 2);
+      } else {
+        font->LayoutWrap(st, glyphs, "- ", 12, 300.0 - 2);
+      }
+      font->LayoutWrap(st, glyphs, views[i].title, 12, 300.0 - 2);
+      font->Flush(cr, glyphs);
+      opt.y = st.y + font->height() + 10;
+    }
   }
 
+  cr.translate({300, 0});
+
+  const auto& view = views[view_id_];
+  DrawView(cr, view, window_height_, window_width_ - 300);
   // Status line:
   {
     cr.set_source_rgb(0.1, 0.1, 0.1);
@@ -408,7 +309,7 @@ gboolean WindowState::Draw(gui::DrawCtx& cr) {
     double h = font->height() + 4;
     auto st_pt = gui::Point{0, window_height_ - h};
     cr.rectangle(st_pt,
-                 gui::Point{static_cast<double>(window_width_), h});
+                 gui::Point{static_cast<double>(window_width_ - 300), h});
 
     cr.fill();
 
@@ -461,6 +362,14 @@ void WindowState::InitEvents() {
               return state->ScrollEvent(event);
               })), this);
 
+  sig6 = g_signal_connect(window, "button-press-event", G_CALLBACK((
+              +[](GtkWidget* widget, GdkEventButton* button, WindowState* state) -> gboolean {
+                bool is_event = (button->time != state->press_time);
+                state->press_time = button->time;
+                if (is_event) return state->ButtonPress(button);
+                return TRUE;
+              })), this);
+
   sig3 = g_signal_connect(drawing_area, "draw", G_CALLBACK((
               +[](GtkWidget*, cairo_t* cr, WindowState* state) -> gboolean {
               return state->Draw(*gui::DrawCtx::wrap(cr));
@@ -484,32 +393,54 @@ void WindowState::InitEvents() {
           return FALSE;
   }), this);
 
-  if (false) {
-
-  buffers.emplace_back();
-  buffers.emplace_back();
-  buffers.emplace_back();
-  buffers.emplace_back();
-  Init(buffers[0], "WindowState::WindowState(GtkWidget* window_inp, GtkWidget* drawing_area_inp,\n                         size_t width, size_t height)");
-  Init(buffers[1], 
-R"(window = window_inp;
-drawing_area = drawing_area_inp;
-window_width_ = width;
-window_height_ = height;
-InitEvents();
-gtk_widget_queue_draw(drawing_area);)");
-  Init(buffers[2], "extern \"C\" void dl_plugin_entry()");
-  Init(buffers[3], "new WindowState();");
-
-  } else {
-  auto tmp = ParseMultiBuffer(LoadFile(".gui/data"));
+  auto tmp = ParseMultiBuffer(LoadFile(MULTIBUFFER_FILENAME));
 
   for (auto& id_b : tmp) {
-    buffers.emplace_back(std::move(id_b.buffer));
+    buffers.emplace_back(std::make_unique<Buffer>(std::move(id_b.buffer)));
   }
 
+  auto view_manifest_str = Collapse(*buffers[1]);
+  view_manifest::Tokenizer tokens(view_manifest_str.c_str());
+  auto* m = view_manifest::parser::DoParse(tokens);
+
+  std::cout << "namifest: \n" << view_manifest_str << "\n";
+  auto get_chunk = [&](view_manifest::ChunkSrc* src) -> Buffer* {
+    int id = stoi(std::string(src->id.str));
+    delete src;
+    assert(id >= 0 && id < buffers.size());
+    return buffers[id].get();
+  };
+  for (view_manifest::EmitFileDecl* decl : m->decls) {
+    using namespace view_manifest;
+    views.push_back({});
+    views.back().title = std::string(decl->name.str);
+    size_t i = 0;
+    auto& view = views.back();
+    for (auto* action_ : decl->actions) {
+      if (i != 0) { view.gaps.push_back(20); }
+      switch (action_->getKind()) {
+      case Action::Kind::Raw: {
+        auto* action = reinterpret_cast<RawAction*>(action_);
+        view.buffers.push_back(get_chunk(action->id));
+        view.decorations.push_back({});
+        delete action;
+        break;
+      } case Action::Kind::DefineFunc: {
+        auto* action = reinterpret_cast<DefineFuncAction*>(action_);
+        view.buffers.push_back(get_chunk(action->sig_id));
+        view.buffers.push_back(get_chunk(action->body_id));
+        view.decorations.push_back({});
+        view.decorations.push_back({false});
+        view.gaps.push_back(0);
+        delete action;
+      }
+      }
+      ++i;
+    }
+
+    delete decl;
   }
-  // What are the things, and how can you compose them?
+  delete m;
 }
 
 WindowState::WindowState(GtkWidget* window_inp, GtkWidget* drawing_area_inp,

@@ -1,0 +1,17 @@
+module view_manifest;
+
+entry Module;
+tokenizer basic;
+
+define ChunkSrc { %id = number }
+
+production Action {
+  pattern Raw { "raw" %id = ChunkSrc ";" }
+  pattern DefineFunc { "func" %sig_id = ChunkSrc "," %body_id = ChunkSrc ";" }
+}
+
+define EmitFileDecl { "view" %name = str "{" %actions = concat { Action } "}" }
+
+define Module {
+  %decls = concat { EmitFileDecl }
+}
