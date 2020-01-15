@@ -61,6 +61,7 @@ std::string GetName(rule_spec::Decl* decl) {
     DEFINE_NAME(PassesTemplate, name, std::string)
     DEFINE_NAME(Passes, name, std::string)
     DEFINE_NAME(Import, name, std::string)
+    DEFINE_NAME(ImportBuffer, name, std::string)
     DEFINE_NAME(Link, fname, Unescaped)
     DEFINE_NAME(SoLink, fname, Unescaped)
   }
@@ -147,6 +148,24 @@ LibraryBuildResult* FileContext::ProcessLibraryBuildResult(rule_spec::Expr* expr
 
 FileContext* FileContext::Eval(string_view name, rule_spec::ImportDecl* decl) {
   return parent->GetFile(Unescaped(decl->path.str));
+}
+
+FileContext* FileContext::Eval(string_view name, rule_spec::ImportBufferDecl* decl) {
+  auto filename = Unescaped(decl->filename.str);
+  
+  auto it = parent->buffer_cache.find(filename);
+  if (it == parent->buffer_cache.end()) {
+    auto data = Collapse(ParseMultiBuffer(LoadFile(Unescaped(decl->filename.str))));
+
+    EmitFromMultiBuffer(data);
+
+    auto& my_result = parent->buffer_cache[filename];
+    my_result.buffer = std::move(data);
+    my_result.parent = parent;
+    it = parent->buffer_cache.find(filename);
+  }
+
+  return it->second.GetFile(std::stoi(std::string(decl->id.str)));
 }
 
 std::string FileContext::GetGeneratedFilename() {
@@ -246,6 +265,22 @@ FileContext* GlobalContext::GetFile(string_view base) {
   result->parent = this;
   result->filename = key;
   for (auto* decl : ReadRuleFile(base)->decls) {
+    result->data[GetName(decl)] = decl;
+  }
+  return result;
+}
+
+FileContext* VirtualFileCollection::GetFile(int64_t key) {
+  auto it = cache.find(key);
+  if (it != cache.end()) return &it->second;
+  auto* result = &cache[key];
+  result->mid_parent = this;
+  result->parent = parent;
+  result->filename = ".generated/ide-gen";
+  result->filename_key = key;
+
+  rule_spec::Tokenizer tokens((new std::string{buffer[key].text})->c_str());
+  for (auto* decl : rule_spec::parser::DoParse(tokens)->decls) {
     result->data[GetName(decl)] = decl;
   }
   return result;

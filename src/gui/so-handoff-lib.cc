@@ -54,7 +54,7 @@ extern "C" Trampoline get_dlopen_trampoline(void* handle, int argc, char **argv)
   state.self_handle = SoHandle(handle);
   state.jump_id = 0;
 
-  state.self_handle.get_sym<void()>("dl_plugin_entry")();
+  state.self_handle.get_sym<void(int argc, char **argv)>("dl_plugin_entry")(argc, argv);
   return get_main_loop();
 }
 

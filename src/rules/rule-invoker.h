@@ -4,16 +4,22 @@
 #include "gen/rules/rule-spec.h"
 #include "rules/string-utils.h"
 #include "rules/compiler.h"
+#include "gui/emit-buffer.h"
 
 struct unit {};
 
 namespace rules {
 
 struct GlobalContext;
+struct VirtualFileCollection;
 
 struct FileContext {
   GlobalContext* parent;
+  VirtualFileCollection* mid_parent;
+
   std::string filename;
+
+  int64_t filename_key;
   std::unordered_map<std::string, rule_spec::Decl*> data; 
   std::unordered_map<rule_spec::Decl*, LibraryBuildResult*> rule_cache;
   std::unordered_map<rule_spec::Decl*, unit> link_cache;
@@ -28,6 +34,7 @@ struct FileContext {
 
   std::string GetGeneratedFilename();
   FileContext* Eval(string_view name, rule_spec::ImportDecl* decl);
+  FileContext* Eval(string_view name, rule_spec::ImportBufferDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::LibraryDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::OldParserDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::OldLoweringSpecDecl* decl);
@@ -54,6 +61,7 @@ struct FileContext {
               VISIT_TYPE(PassesTemplate)
               VISIT_TYPE(Passes)
               VISIT_TYPE(Import)
+              VISIT_TYPE(ImportBuffer)
               VISIT_TYPE(Link)
               VISIT_TYPE(SoLink)
         }
@@ -74,6 +82,7 @@ struct FileContext {
               VISIT_TYPE(PassesTemplate)
               VISIT_TYPE(Passes)
               VISIT_TYPE(Import)
+              VISIT_TYPE(ImportBuffer)
               VISIT_TYPE(Link)
               VISIT_TYPE(SoLink)
         }
@@ -104,8 +113,19 @@ struct FileContext {
   }
 };
 
+struct VirtualFileCollection {
+  std::vector<CollapsedBuffer> buffer;
+  std::unordered_map<int64_t, FileContext> cache;
+
+  FileContext* GetFile(int64_t key); 
+
+  GlobalContext* parent;
+};
+
 struct GlobalContext {
   std::unordered_map<std::string, FileContext> cache;
+  std::unordered_map<std::string, VirtualFileCollection> buffer_cache;
+
   LibraryBuildResult* default_flags = MakeDefaultFlags();
   LibraryBuildResult* so_flags = MakeSoFlags();
   LibraryBuildResult* gtk_flags = MakeGtkFlags();

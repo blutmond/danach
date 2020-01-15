@@ -15,6 +15,14 @@ lib buffer {
   ];
 }
 
+lib emit_buffer {
+  srcs = ["emit-buffer.cc"];
+  hdrs = ["emit-buffer.h"];
+  deps = [
+    buffer, emit_manifest
+  ];
+}
+
 lib buffer_edit {
   srcs = ["buffer-edit.cc"];
   hdrs = ["buffer-edit.h"];

@@ -306,6 +306,7 @@ struct Tokenizer {
 namespace rule_spec{
 struct Decl;
 struct ImportDecl;
+struct ImportBufferDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
@@ -323,7 +324,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -334,6 +335,13 @@ struct Decl {
 struct ImportDecl: public Decl {
   ImportDecl() : Decl(Kind::Import) {}
   tok::Token path;
+  tok::Token name;
+};
+
+struct ImportBufferDecl: public Decl {
+  ImportBufferDecl() : Decl(Kind::ImportBuffer) {}
+  tok::Token id;
+  tok::Token filename;
   tok::Token name;
 };
 
@@ -504,14 +512,31 @@ return result;
 Decl* _production_Decl(Tokenizer& tokens) {
 if (tokens.peak_check_str("import")) {
 tokens.expect("import");
+if (tokens.peak_check(tok::str)) {
+auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
-auto __current_self = new ImportDecl;__current_self->path = tokens.expect(tok::str);
+auto __current_self = new ImportDecl;__current_self->path = _tmp_0;
 tokens.expect("as");
 __current_self->name = tokens.expect(tok::identifier);
 tokens.expect(";");
 __current_self;
 });
 return result;
+}
+if (tokens.peak_check(tok::number)) {
+auto _tmp_0 = tokens.expect(tok::number);
+auto result = ({
+auto __current_self = new ImportBufferDecl;__current_self->id = _tmp_0;
+tokens.expect("of");
+__current_self->filename = tokens.expect(tok::str);
+tokens.expect("as");
+__current_self->name = tokens.expect(tok::identifier);
+tokens.expect(";");
+__current_self;
+});
+return result;
+}
+tokens.unexpected();
 }
 if (tokens.peak_check_str("old_parser")) {
 tokens.expect("old_parser");

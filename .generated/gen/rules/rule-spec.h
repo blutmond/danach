@@ -78,6 +78,7 @@ struct Tokenizer {
 namespace rule_spec{
 struct Decl;
 struct ImportDecl;
+struct ImportBufferDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
@@ -95,7 +96,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -106,6 +107,13 @@ struct Decl {
 struct ImportDecl: public Decl {
   ImportDecl() : Decl(Kind::Import) {}
   tok::Token path;
+  tok::Token name;
+};
+
+struct ImportBufferDecl: public Decl {
+  ImportBufferDecl() : Decl(Kind::ImportBuffer) {}
+  tok::Token id;
+  tok::Token filename;
   tok::Token name;
 };
 

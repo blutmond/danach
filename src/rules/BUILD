@@ -1,4 +1,5 @@
 import "src/parser" as parser;
+import "src/gui" as gui;
 
 old_parser rule_spec {
   parser = "rule_spec-parser";
@@ -53,7 +54,7 @@ lib rule_invoker {
   deps = [string_utils, compiler,
           parser.parser_lowering,
           parser.lowering_spec_lowering,
-          rule_spec];
+          rule_spec, gui.emit_buffer];
 }
 
 lib tool {
