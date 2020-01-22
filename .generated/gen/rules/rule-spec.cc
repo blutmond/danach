@@ -307,6 +307,8 @@ namespace rule_spec{
 struct Decl;
 struct ImportDecl;
 struct ImportBufferDecl;
+struct LetDecl;
+struct BufferParserDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
@@ -317,6 +319,7 @@ struct SoLinkDecl;
 struct Expr;
 struct NameExpr;
 struct StringLiteralExpr;
+struct IntegerLiteralExpr;
 struct ArrayLiteralExpr;
 struct DotExpr;
 struct Module;
@@ -324,7 +327,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, ImportBuffer, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, Let, BufferParser, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -343,6 +346,18 @@ struct ImportBufferDecl: public Decl {
   tok::Token id;
   tok::Token filename;
   tok::Token name;
+};
+
+struct LetDecl: public Decl {
+  LetDecl() : Decl(Kind::Let) {}
+  tok::Token name;
+  Expr* value;
+};
+
+struct BufferParserDecl: public Decl {
+  BufferParserDecl() : Decl(Kind::BufferParser) {}
+  tok::Token name;
+  std::vector<Option*> options;
 };
 
 struct OldParserDecl: public Decl {
@@ -389,7 +404,7 @@ struct SoLinkDecl: public Decl {
 
 struct Expr {
   enum class Kind {
-    Name, StringLiteral, ArrayLiteral, Dot,
+    Name, StringLiteral, IntegerLiteral, ArrayLiteral, Dot,
   };
   Expr(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -404,6 +419,11 @@ struct NameExpr: public Expr {
 
 struct StringLiteralExpr: public Expr {
   StringLiteralExpr() : Expr(Kind::StringLiteral) {}
+  tok::Token value;
+};
+
+struct IntegerLiteralExpr: public Expr {
+  IntegerLiteralExpr() : Expr(Kind::IntegerLiteral) {}
   tok::Token value;
 };
 
@@ -452,6 +472,14 @@ if (tokens.peak_check(tok::str)) {
 auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
 auto __current_self = new StringLiteralExpr;__current_self->value = _tmp_0;
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check(tok::number)) {
+auto _tmp_0 = tokens.expect(tok::number);
+auto result = ({
+auto __current_self = new IntegerLiteralExpr;__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -537,6 +565,37 @@ __current_self;
 return result;
 }
 tokens.unexpected();
+}
+if (tokens.peak_check_str("let")) {
+tokens.expect("let");
+auto result = ({
+auto __current_self = new LetDecl;__current_self->name = tokens.expect(tok::identifier);
+tokens.expect("=");
+__current_self->value = _production_Expr(tokens);
+tokens.expect(";");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("buf_parser")) {
+tokens.expect("buf_parser");
+auto result = ({
+auto __current_self = new BufferParserDecl;__current_self->name = tokens.expect(tok::identifier);
+tokens.expect("{");
+__current_self->options = ([&]{
+std::vector<Option*> __current_vector__;
+    while (true) {
+   if (tokens.peak_check_str("}")) { break; }
+ __current_vector__.push_back([&]{auto result = _production_Option(tokens);
+return result;
+ }());  }
+return __current_vector__;
+}())
+;
+tokens.expect("}");
+__current_self;
+});
+return result;
 }
 if (tokens.peak_check_str("old_parser")) {
 tokens.expect("old_parser");

@@ -1,3 +1,28 @@
+#0
+
+#1
+view "Metadata" {
+  raw 0;
+  raw 1;
+}
+
+view "BUILD" {
+  raw 2;
+}
+
+view "lowering-spec" {
+  raw 3;
+  raw 4;
+}
+#2
+buf_parser lowering_spec {
+  parser = 3;
+  tokens = 4;
+  gen_dir = ".generated/gen/parser";
+  cc_out = "lowering_spec.cc";
+  h_out = "lowering_spec.h";
+}
+#3
 module lowering_spec;
 
 tokenizer basic;
@@ -66,4 +91,39 @@ production Decl {
 define Module {
   "module" %mod_name = identifier ";"
   %decls = concat { Decl }
+}
+#4
+module unused;
+
+regex basic {
+  let digit = "0" : "9";
+  let id = ("a" : "z") | "_" | ("A" : "Z");
+  let all = (" " : "~");
+  emit dot = ".";
+  emit plus = "+";
+  emit pipe = "|";
+  emit star = "*";
+  emit semi = ";";
+  emit comma = ",";
+  emit equal = "=";
+  emit equalequal = "==";
+  emit notequal = "!=";
+  emit open_arr = "<";
+  emit close_arr = ">";
+  emit open_paran = "(";
+  emit close_paran = ")";
+  emit open_brace = "{";
+  emit close_brace = "}";
+  emit open_bracket = "[";
+  emit close_bracket = "]";
+  emit percent = "%";
+  emit arrow = "->";
+  emit colon = ":";
+  emit coloncolon = "::";
+  emit eof = 0;
+  ignore "\n";
+  ignore " ";
+  emit identifier = id . (id | digit)*;
+  emit str = "\"" . (("\\" . all) | (" " : "!") | ("#" : "[") | ("]" : "~"))* . "\"";
+  emit number = digit+;
 }

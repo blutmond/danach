@@ -1,13 +1,8 @@
 import "src/parser/types" as types;
 import "src/parser/patterns" as patterns;
+import 2 of ".gui/parser" as new_parser;
 
-old_parser lowering_spec {
-  parser = "syntax/lowering_spec-parser";
-  tokens = "syntax/lowering_spec-tokenizer";
-  cc_out = "lowering_spec.cc";
-  h_out = "lowering_spec.h";
-}
-
+let lowering_spec = new_parser.lowering_spec;
 old_lowering_spec emit_lowering_spec {
   src = "emit_lowering_spec";
   cc_out = "emit_lowering_spec.cc";
@@ -27,9 +22,6 @@ lib lowering_spec_tool {
 link "lowering-spec-tool-dynamic" {
   deps = [lowering_spec_tool];
 }
-
-
-
 
 old_parser parser_spec {
   parser = "syntax/parser_spec-parser";

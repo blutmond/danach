@@ -50,6 +50,12 @@ std::string GetStringOption(rule_spec::Option* option) {
   return Unescaped(reinterpret_cast<StringLiteralExpr*>(option->value)->value.str);
 }
 
+int64_t GetIntegerOption(rule_spec::Option* option) {
+  using namespace rule_spec;
+  assert(option && option->value->getKind() == Expr::Kind::IntegerLiteral && "Must be an integer literal...");
+  return std::stoi(std::string(reinterpret_cast<IntegerLiteralExpr*>(option->value)->value.str));
+}
+
 std::string GetName(rule_spec::Decl* decl) {
 #define DEFINE_NAME(tname, name_id, unwrap) \
    case rule_spec::Decl::Kind::tname: \
@@ -62,6 +68,8 @@ std::string GetName(rule_spec::Decl* decl) {
     DEFINE_NAME(Passes, name, std::string)
     DEFINE_NAME(Import, name, std::string)
     DEFINE_NAME(ImportBuffer, name, std::string)
+    DEFINE_NAME(BufferParser, name, std::string)
+    DEFINE_NAME(Let, name, std::string)
     DEFINE_NAME(Link, fname, Unescaped)
     DEFINE_NAME(SoLink, fname, Unescaped)
   }
@@ -77,16 +85,13 @@ LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>&
   return SimpleCompileCXXFile(deps, folder, ".build/objects/" + std::string(folder), srcs);
 }
 
-void EmitParserGen(const char* parser, const char* tokenizer,
-                   std::ostream& h_stream,
-                   std::ostream& cc_stream) {
-  auto contents = LoadFile(parser);
-  auto contents_tok = LoadFile(tokenizer);
-
-  production_spec::Tokenizer tokens(contents.c_str());
+void EmitParserGenRaw(const std::string& parser, const std::string& tokenizer,
+                      std::ostream& h_stream,
+                      std::ostream& cc_stream) {
+  production_spec::Tokenizer tokens(parser.c_str());
   auto* m = production_spec::parser::DoParse(tokens);
 
-  parser_spec::Tokenizer tokens_tok(contents_tok.c_str());
+  parser_spec::Tokenizer tokens_tok(tokenizer.c_str());
   auto* m2 = parser_spec::parser::DoParse(tokens_tok);
 
   auto* ctx = parser::DoAnalysis(m, m2);
@@ -95,6 +100,13 @@ void EmitParserGen(const char* parser, const char* tokenizer,
   parser::EmitParser(cc_stream, m, m2, ctx, /* is_header= */ false);
   parser::EmitParser(h_stream, m, m2, ctx, /* is_header= */ true);
 }
+
+void EmitParserGen(const char* parser, const char* tokenizer,
+                   std::ostream& h_stream,
+                   std::ostream& cc_stream) {
+  EmitParserGenRaw(LoadFile(parser), LoadFile(tokenizer), h_stream, cc_stream);
+}
+
 
 LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResult*>& deps,
                                              const char* lowering_spec, const char* outname) {
@@ -174,6 +186,34 @@ std::string FileContext::GetGeneratedFilename() {
   } else {
     return filename;
   }
+}
+
+const std::string &FileContext::GetBufferContents(rule_spec::Option* option) {
+  int64_t v = GetIntegerOption(option);
+  assert(mid_parent && "Must have mid parent");
+  return mid_parent->buffer.at(v).text;
+}
+
+LibraryBuildResult* FileContext::Eval(string_view name, rule_spec::LetDecl* decl) {
+  return ProcessLibraryBuildResult(decl->value);
+}
+
+LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::BufferParserDecl* decl) {
+  auto options = IndexOptionSet(filename, rule_name, decl->options, {"parser", "tokens", "cc_out", "h_out", "gen_dir"});
+  std::string parser = GetBufferContents(options["parser"]);
+  std::string tokenizer = GetBufferContents(options["tokens"]);
+  std::string cc_out = GetStringOption(options["cc_out"]);
+  std::string h_out = GetStringOption(options["h_out"]);
+  std::string gen_dir = GetStringOption(options["gen_dir"]);
+
+  EmitStream h_stream;
+  EmitStream cc_stream;
+  EmitParserGenRaw(parser, tokenizer, h_stream.stream(), cc_stream.stream());
+  cc_stream.write(gen_dir + "/" + cc_out);
+  h_stream.write(gen_dir + "/" + h_out);
+
+  return SimpleCompileCXXFile({parent->default_flags, parent->GetRule("src/parser", "tokenizer_helper")},
+                              gen_dir, {cc_out}); 
 }
 
 LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldParserDecl* decl) {

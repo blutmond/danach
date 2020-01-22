@@ -26,6 +26,8 @@ struct FileContext {
 
   rule_spec::Decl* GetDecl(string_view rule);
 
+  const std::string &GetBufferContents(rule_spec::Option* option);
+
   LibraryBuildResult* ProcessLibraryBuildResult(rule_spec::Expr* expr);
 
   std::vector<LibraryBuildResult*> ProcessLibraryBuildResultList(rule_spec::Option* option);
@@ -38,6 +40,8 @@ struct FileContext {
   LibraryBuildResult* Eval(string_view name, rule_spec::LibraryDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::OldParserDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::OldLoweringSpecDecl* decl);
+  LibraryBuildResult* Eval(string_view name, rule_spec::BufferParserDecl* decl);
+  LibraryBuildResult* Eval(string_view name, rule_spec::LetDecl* decl);
   unit Eval(string_view name, rule_spec::SoLinkDecl* decl);
   unit Eval(string_view name, rule_spec::LinkDecl* decl);
 
@@ -62,7 +66,9 @@ struct FileContext {
               VISIT_TYPE(Passes)
               VISIT_TYPE(Import)
               VISIT_TYPE(ImportBuffer)
+              VISIT_TYPE(BufferParser)
               VISIT_TYPE(Link)
+              VISIT_TYPE(Let)
               VISIT_TYPE(SoLink)
         }
 #undef VISIT_TYPE
@@ -83,7 +89,9 @@ struct FileContext {
               VISIT_TYPE(Passes)
               VISIT_TYPE(Import)
               VISIT_TYPE(ImportBuffer)
+              VISIT_TYPE(BufferParser)
               VISIT_TYPE(Link)
+              VISIT_TYPE(Let)
               VISIT_TYPE(SoLink)
         }
 #undef VISIT_TYPE

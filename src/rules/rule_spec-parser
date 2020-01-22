@@ -6,6 +6,7 @@ tokenizer basic;
 expr Expr {
   pattern Name { %name = identifier }
   pattern StringLiteral { %value = str }
+  pattern IntegerLiteral { %value = number }
   pattern ArrayLiteral { "[" %values = comma_array(comma) { Expr } "]" }
   pattern Dot { %base = _ "." %name = identifier }
 }
@@ -17,6 +18,8 @@ define Option {
 production Decl {
   pattern Import {"import" %path = str "as" %name = identifier ";" }
   pattern ImportBuffer { "import" %id = number "of" %filename = str "as" %name = identifier ";" }
+  pattern Let { "let" %name = identifier "=" %value = Expr ";" }
+  pattern BufferParser { "buf_parser"  %name = identifier "{" %options = concat { Option } "}" }
   pattern OldParser {"old_parser" %name = identifier "{" %options = concat { Option } "}" }
   pattern OldLoweringSpec { "old_lowering_spec" %name = identifier "{" %options = concat { Option } "}" }
   pattern Library {"lib" %name = identifier "{" %options = concat { Option } "}" }

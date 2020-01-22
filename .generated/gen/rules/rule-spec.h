@@ -79,6 +79,8 @@ namespace rule_spec{
 struct Decl;
 struct ImportDecl;
 struct ImportBufferDecl;
+struct LetDecl;
+struct BufferParserDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
@@ -89,6 +91,7 @@ struct SoLinkDecl;
 struct Expr;
 struct NameExpr;
 struct StringLiteralExpr;
+struct IntegerLiteralExpr;
 struct ArrayLiteralExpr;
 struct DotExpr;
 struct Module;
@@ -96,7 +99,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, ImportBuffer, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, Let, BufferParser, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -115,6 +118,18 @@ struct ImportBufferDecl: public Decl {
   tok::Token id;
   tok::Token filename;
   tok::Token name;
+};
+
+struct LetDecl: public Decl {
+  LetDecl() : Decl(Kind::Let) {}
+  tok::Token name;
+  Expr* value;
+};
+
+struct BufferParserDecl: public Decl {
+  BufferParserDecl() : Decl(Kind::BufferParser) {}
+  tok::Token name;
+  std::vector<Option*> options;
 };
 
 struct OldParserDecl: public Decl {
@@ -161,7 +176,7 @@ struct SoLinkDecl: public Decl {
 
 struct Expr {
   enum class Kind {
-    Name, StringLiteral, ArrayLiteral, Dot,
+    Name, StringLiteral, IntegerLiteral, ArrayLiteral, Dot,
   };
   Expr(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -176,6 +191,11 @@ struct NameExpr: public Expr {
 
 struct StringLiteralExpr: public Expr {
   StringLiteralExpr() : Expr(Kind::StringLiteral) {}
+  tok::Token value;
+};
+
+struct IntegerLiteralExpr: public Expr {
+  IntegerLiteralExpr() : Expr(Kind::IntegerLiteral) {}
   tok::Token value;
 };
 
