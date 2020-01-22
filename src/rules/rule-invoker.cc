@@ -206,6 +206,7 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::BufferPa
   std::string h_out = GetStringOption(options["h_out"]);
   std::string gen_dir = GetStringOption(options["gen_dir"]);
 
+  DoMkdir(strdup(gen_dir));
   EmitStream h_stream;
   EmitStream cc_stream;
   EmitParserGenRaw(parser, tokenizer, h_stream.stream(), cc_stream.stream());
