@@ -19,6 +19,16 @@ view "parser-spec" {
   raw 5;
   raw 6;
 }
+
+view "tokenizer-spec" {
+  raw 7;
+  raw 8;
+}
+
+view "emit_lowering_spec" {
+  raw 9;
+}
+
 #2
 buf_parser lowering_spec {
   parser = 3;
@@ -40,6 +50,11 @@ buf_parser tokenizer_spec {
   gen_dir = ".generated/gen/parser";
   cc_out = "tokenizer-spec.cc";
   h_out = "tokenizer-spec.h";
+}
+buf_lowering_spec emit_lowering_spec {
+  src = 9;
+  gen_dir = ".generated/gen/parser";
+  cc_out = "emit_lowering_spec.cc";
 }
 #3
 module lowering_spec;
@@ -330,4 +345,328 @@ regex basic {
   emit identifier = id . (id | digit)*;
   emit str = "\"" . (("\\" . all) | (" " : "!") | ("#" : "[") | ("]" : "~"))* . "\"";
   emit number = digit+;
+}
+#9
+module lowering_spec;
+
+context stream: Stream;
+
+func EmitType(stream: Stream, t: TypeRef) -> unit {
+  open t: TypeRef {
+  case .Void: emit { "void"; }
+  case .Member: EmitType(t->base); emit { "::"; t->name.str; }
+  case .Named: emit { t->name.str; }
+  default: emit { "unknown"; }
+  }
+}
+
+func EmitTypeSignature(stream: Stream, t: TypeRef) -> unit {
+  open t: TypeRef {
+  case .Void: emit { "void"; }
+  case .Template:
+    EmitTypeSignature(t->base);
+    emit { "<"; }
+    var i: int;
+    i = 0;
+    for arg in t->args {
+      if (i == 0) {} else { emit { ", "; } } increment(i);
+      EmitTypeSignature(arg);
+    }
+    emit { ">"; }
+  case .Member:
+    EmitType(t->base);
+    emit { "::"; t->name.str; }
+  case .Named:
+    if (t->name.str == "Token") { emit { "tok::Token"; } return; }
+    if (t->name.str == "Array") { emit { "std::vector"; } return; }
+    if (t->name.str == "Map") { emit { "std::map"; } return; }
+    if (t->name.str == "String") { emit { "string_view"; } return; }
+    if (t->name.str == "Stream") { emit { "std::ostream&"; } return; }
+    if (t->name.str == "char") { emit { "char"; } return; }
+    if (t->name.str == "int") { emit { "int"; } return; }
+    if (t->name.str == "bool") { emit { "bool"; } return; }
+    emit { t->name.str; "*"; }
+  }
+}
+
+func EmitExpr(stream: Stream, ctx: ContextFinderContext, expr: Expr) -> unit {
+  open expr : Expr {
+  case .New:
+    emit { "({\nauto* self = new "; }
+    EmitType(expr->type);
+    emit { ";\n"; }
+    EmitStmt(ctx, expr->body);
+    emit { "self;\n"; }
+    emit { "})"; }
+  case .Number:
+    emit { expr->value.str; }
+  case .Str:
+    emit { expr->value.str; }
+  case .Dot:
+    EmitExpr(ctx, expr->base);
+    emit { "."; expr->name.str; }
+  case .Arrow:
+    EmitExpr(ctx, expr->base);
+    emit { "->"; expr->name.str; }
+  case .Named:
+    emit { expr->name.str; }
+  case .Index:
+    EmitExpr(ctx, expr->base);
+    var i : int;
+    i = 0;
+    emit { "["; }
+    for arg in expr->args {
+      if (i == 0) {} else { emit { ", "; } } increment(i);
+      EmitExpr(ctx, arg);
+    }
+    emit { "]"; }
+  case .ColonColon:
+    EmitExpr(ctx, expr->base);
+    emit { "::"; expr->name.str; }
+  case .Call:
+    let base = expr->base;
+    open base: Expr {
+      case .Named:
+      if (base->name.str == "assert") {
+        emit { "({\n"; }
+        emit { "if (!("; }
+        EmitExpr(ctx, expr->args[0]);
+        emit { ")) {\n"; }
+        emit { "std::cerr << R\"ASSERT(Assert failed: "; }
+        var i : int;
+        i = 0;
+        for arg in expr->args {
+          if (i == 0) {} else { emit { ", "; } } increment(i);
+          EmitExpr(ctx, arg);
+        }
+        emit { "\n)ASSERT\";\n"; }
+        emit { "exit(-1);\n"; }
+        emit { "}\n})"; }
+        return;
+      }
+      if (base->name.str == "error") {
+        emit { "({\n"; }
+        emit { "std::cerr << R\"ASSERT(Assert failed: "; }
+        var i : int;
+        i = 0;
+        for arg in expr->args {
+          if (i == 0) {} else { emit { ", "; } } increment(i);
+          EmitExpr(ctx, arg);
+        }
+        emit { "\n)ASSERT\";\n"; }
+        emit { "exit(-1);\n"; }
+        emit { "})"; }
+        return;
+      }
+      default:
+    }
+    EmitExpr(ctx, expr->base);
+    emit { "("; }
+    var i: int;
+    i = 0;
+    open base: Expr {
+    case .Named:
+      for param in ctx->GetHiddenParams(base->name.str) {
+        if (i == 0) {} else { emit { ", "; } } increment(i);
+        emit { param->name.str; }
+      }
+    default:
+    }
+    for arg in expr->args {
+      if (i == 0) {} else { emit { ", "; } } increment(i);
+      EmitExpr(ctx, arg);
+    }
+    emit { ")"; }
+  case .CompEqEq:
+    EmitExpr(ctx, expr->lhs);
+    emit {" == "; }
+    EmitExpr(ctx, expr->rhs);
+  case .Assign:
+    EmitExpr(ctx, expr->lhs);
+    emit {" = "; }
+    EmitExpr(ctx, expr->rhs);
+  }
+}
+
+func EmitStmt(stream: Stream, ctx: ContextFinderContext, stmt: Stmt) -> unit {
+  open stmt: Stmt {
+  case .Compound:
+    for cstmt in stmt->stmts { EmitStmt(ctx, cstmt); }
+  case .Return:
+    emit { "return "; }
+    EmitExpr(ctx, stmt->expr);
+    emit { ";\n"; }
+  case .Let:
+    emit { "auto __tmp__"; stmt->name.str; " = "; }
+    EmitExpr(ctx, stmt->expr);
+    emit { ";\n"; }
+    emit { "auto "; stmt->name.str; " = std::move(__tmp__"; stmt->name.str; ");\n"; }
+  case .Var:
+    EmitTypeSignature(stmt->type);
+    emit { " "; stmt->name.str; ";"; }
+  case .OpenWithType:
+    emit { "{\n"; }
+    emit { "auto __tmp_switch_name = "; stmt->name.str; ";\n"; }
+    emit { "switch ("; stmt->name.str; "->getKind()) {\n"; }
+    var case_open : bool;
+    case_open = false;
+    for cstmt in AsCompound(stmt->body)->stmts { open cstmt : Stmt {
+      case .Case:
+        if (case_open) { emit { "break;\n} "; } }
+        case_open = true;
+        emit { "case "; }
+        EmitType(stmt->type);
+        emit { "::Kind::"; cstmt->name.str; ": {\n"; }
+        emit { "auto* "; stmt->name.str
+           ; " = reinterpret_cast<"; cstmt->name.str; }
+        EmitType(stmt->type);
+        emit { "*>(__tmp_switch_name);\n"; }
+        emit { "(void)"; stmt->name.str; ";\n"; }
+      case .Default:
+        if (case_open) { emit { "break;\n} "; } }
+        case_open = true;
+        emit { "default: {\n"; }
+      default:
+        EmitStmt(ctx, cstmt);
+    } }
+    if (case_open) { emit { "}\n"; } }
+    emit { "}\n"; }
+    emit { "}\n"; }
+  case .Open:
+    emit { "{\n"; }
+    emit { "auto __tmp_switch_name = "; stmt->name.str; ";\n"; }
+    emit { "switch ("; stmt->name.str; "->getKind()) {\n"; }
+    var case_open : bool;
+    case_open = false;
+    for cstmt in AsCompound(stmt->body)->stmts { open cstmt : Stmt {
+      case .Case:
+        if (case_open) { emit { "break;\n} "; } }
+        case_open = true;
+        emit { "case Kind::"; cstmt->name.str; ": {\n"; }
+        emit { "auto* "; stmt->name.str
+           ; " = reinterpret_cast<"; cstmt->name.str; ">(__tmp_switch_name);\n"; }
+      case .Default:
+        if (case_open) { emit { "break;\n} "; } }
+        case_open = true;
+        emit { "default: {\n"; }
+      default:
+        EmitStmt(ctx, cstmt);
+    } }
+    if (case_open) { emit { "}\n"; } }
+    emit { "}\n"; }
+    emit { "}\n"; }
+  case .Case:
+    error("Case can only be used as part of a switch...\n");
+  case .Emitter:
+    for cstmt in AsCompound(stmt->body)->stmts { open cstmt : Stmt {
+      case .Discard:
+        emit { ctx->GetStdoutContext(); }
+        emit { " << ("; }
+        EmitExpr(ctx, cstmt->expr);
+        emit { ");\n"; }
+      default:
+        EmitStmt(ctx, cstmt);
+    } }
+  case .DbgEmitter:
+    for cstmt in AsCompound(stmt->body)->stmts { open cstmt : Stmt {
+      case .Discard:
+        emit { "std::cerr << ("; }
+        EmitExpr(ctx, cstmt->expr);
+        emit { ");\n"; }
+      default:
+        EmitStmt(ctx, cstmt);
+    } }
+  case .Break: emit { "break;\n"; }
+  case .ReturnVoid: emit { "return;\n"; }
+  case .If:
+    emit { "if ("; }
+    EmitExpr(ctx, stmt->cond);
+    emit { ") {\n"; }
+    EmitStmt(ctx, stmt->body);
+    emit { "}\n"; }
+  case .IfElse:
+    emit { "if ("; }
+    EmitExpr(ctx, stmt->cond);
+    emit { ") {\n"; }
+    EmitStmt(ctx, stmt->body);
+    emit { "} else {\n"; }
+    EmitStmt(ctx, stmt->else_body);
+    emit { "}\n"; }
+  case .Loop:
+    emit { "while (true) {\n"; }
+    EmitStmt(ctx, stmt->body);
+    emit { "}\n"; }
+  case .For:
+    emit { "for (auto "; stmt->name.str; " : "; }
+    EmitExpr(ctx, stmt->sequence);
+    emit { ") {\n"; }
+    EmitStmt(ctx, stmt->body);
+    emit { "}\n"; }
+  case .Scope:
+    emit { "{\n"; }
+    emit { "auto __tmp__"; stmt->name.str; " = "; }
+    EmitExpr(ctx, stmt->expr);
+    emit { ";\n"; }
+    emit { "auto "; stmt->name.str; " = std::move(__tmp__"; stmt->name.str; ");\n"; }
+    EmitStmt(ctx, stmt->body);
+    emit { "}\n"; }
+  case .Default:
+    error("Default can only be used as part of a switch...\n");
+  case .Discard:
+    EmitExpr(ctx, stmt->expr);
+    emit { ";\n"; }
+  }
+}
+
+func EmitFuncDeclHeader(stream: Stream, decl: FuncDecl) -> unit {
+  EmitTypeSignature(decl->ret_t);
+  emit { " "; decl->name.str; "("; }
+  var i : int;
+  i = 0;
+  for arg in decl->args {
+    if (i == 0) {} else { emit { ", "; } } increment(i);
+    EmitTypeSignature(arg->type);
+    emit { " "; arg->name.str; }
+  }
+  emit { ")"; }
+}
+
+func EmitFuncDecl(stream: Stream, ctx: ContextFinderContext, decl: FuncDecl) -> unit {
+  EmitFuncDeclHeader(decl);
+  emit { " {\n"; }
+  EmitStmt(ctx, decl->body);
+  emit { "}\n"; }
+}
+
+func Emit(stream: Stream, m: Module) -> unit {
+  emit { "namespace "; m->mod_name.str; " {\n\n"; }
+  let ctx = new ContextFinderContext {};
+
+  for decl in m->decls { open decl : Decl { default:
+    case .Func: 
+      EmitFuncDeclHeader(decl);
+      emit { ";\n"; }
+      ctx->RegisterFunc(decl);
+    case .Context:
+      ctx->RegisterContext(decl);
+  } }
+  
+  for decl in m->decls { open decl : Decl { default: case .Func: 
+    for arg in decl->args {
+      let sub_ctx = ctx->isContextUsage(arg->name.str);
+      if (sub_ctx) {
+        ctx->HardSetContext(decl, sub_ctx);
+      } else {
+        break;
+      }
+    }
+  } }
+
+  emit { "\n"; }
+
+  for decl in m->decls { open decl : Decl { default: case .Func:
+    EmitFuncDecl(ctx, decl);
+  } }
+
+  emit { "\n}  // namespace "; m->mod_name.str; "\n"; }
 }

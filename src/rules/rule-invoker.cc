@@ -70,6 +70,7 @@ std::string GetName(rule_spec::Decl* decl) {
     DEFINE_NAME(ImportBuffer, name, std::string)
     DEFINE_NAME(BufferParser, name, std::string)
     DEFINE_NAME(Let, name, std::string)
+    DEFINE_NAME(BufferLoweringSpec, name, std::string)
     DEFINE_NAME(Link, fname, Unescaped)
     DEFINE_NAME(SoLink, fname, Unescaped)
   }
@@ -107,20 +108,17 @@ void EmitParserGen(const char* parser, const char* tokenizer,
   EmitParserGenRaw(LoadFile(parser), LoadFile(tokenizer), h_stream, cc_stream);
 }
 
-
-LibraryBuildResult *SimpleOldLoweringSpecGen(const std::vector<LibraryBuildResult*>& deps,
-                                             const char* lowering_spec, const char* outname) {
-  auto contents = LoadFile(lowering_spec);
+void SimpleOldLoweringSpecGenRaw(const std::string& contents, const std::string& outname) {
   lowering_spec::Tokenizer tokens(contents.c_str());
   auto* m = lowering_spec::parser::DoParse(tokens);
 
   EmitStream stream;
   lowering_spec::Emit(stream.stream(), m);
   stream.write(outname);
+}
 
-  auto* res = new LibraryBuildResult;
-  res->deps = deps;
-  return res;
+void SimpleOldLoweringSpecGen(const char* lowering_spec, const std::string& outname) {
+  SimpleOldLoweringSpecGenRaw(LoadFile(lowering_spec), outname);
 }
 
 }
@@ -237,6 +235,19 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldParse
                               ".generated/" + filename_gen, {cc_out}); 
 
 }
+
+LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::BufferLoweringSpecDecl* decl) {
+  auto options = IndexOptionSet(filename, rule_name, decl->options, {"src", "gen_dir", "cc_out"});
+
+  auto src = GetBufferContents(options["src"]);
+  auto gen_dir = GetStringOption(options["gen_dir"]);
+  auto cc_out = GetStringOption(options["cc_out"]);
+
+  DoMkdir(strdup(gen_dir));
+  SimpleOldLoweringSpecGenRaw(src, gen_dir + "/" + cc_out);
+
+  return new LibraryBuildResult; 
+}
 LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldLoweringSpecDecl* decl) {
   auto filename_gen = GetGeneratedFilename();
   auto options = IndexOptionSet(filename, rule_name, decl->options, {"src", "cc_out"});
@@ -245,8 +256,7 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldLower
   auto cc_out = GetStringOption(options["cc_out"]);
 
   DoMkdir(strdup(".generated/" + filename_gen));
-  SimpleOldLoweringSpecGen({parent->default_flags}, strdup(filename + "/" + src),
-                           strdup(".generated/" + filename_gen + "/" + cc_out));
+  SimpleOldLoweringSpecGen(strdup(filename + "/" + src), ".generated/" + filename_gen + "/" + cc_out);
 
   return new LibraryBuildResult; 
 }

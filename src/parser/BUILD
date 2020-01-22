@@ -5,11 +5,7 @@ import 2 of ".gui/parser" as new_parser;
 let lowering_spec = new_parser.lowering_spec;
 let parser_spec = new_parser.parser_spec;
 let tokenizer_spec = new_parser.tokenizer_spec;
-
-old_lowering_spec emit_lowering_spec {
-  src = "emit_lowering_spec";
-  cc_out = "emit_lowering_spec.cc";
-}
+let emit_lowering_spec = new_parser.emit_lowering_spec;
 
 lib lowering_spec_lowering {
   srcs = ["lowering_spec_lowering.cc"];

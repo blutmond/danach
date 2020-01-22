@@ -81,6 +81,7 @@ struct ImportDecl;
 struct ImportBufferDecl;
 struct LetDecl;
 struct BufferParserDecl;
+struct BufferLoweringSpecDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
@@ -99,7 +100,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, ImportBuffer, Let, BufferParser, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, Let, BufferParser, BufferLoweringSpec, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -128,6 +129,12 @@ struct LetDecl: public Decl {
 
 struct BufferParserDecl: public Decl {
   BufferParserDecl() : Decl(Kind::BufferParser) {}
+  tok::Token name;
+  std::vector<Option*> options;
+};
+
+struct BufferLoweringSpecDecl: public Decl {
+  BufferLoweringSpecDecl() : Decl(Kind::BufferLoweringSpec) {}
   tok::Token name;
   std::vector<Option*> options;
 };

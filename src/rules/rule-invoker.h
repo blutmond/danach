@@ -41,6 +41,7 @@ struct FileContext {
   LibraryBuildResult* Eval(string_view name, rule_spec::OldParserDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::OldLoweringSpecDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::BufferParserDecl* decl);
+  LibraryBuildResult* Eval(string_view name, rule_spec::BufferLoweringSpecDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::LetDecl* decl);
   unit Eval(string_view name, rule_spec::SoLinkDecl* decl);
   unit Eval(string_view name, rule_spec::LinkDecl* decl);
@@ -67,6 +68,7 @@ struct FileContext {
               VISIT_TYPE(Import)
               VISIT_TYPE(ImportBuffer)
               VISIT_TYPE(BufferParser)
+              VISIT_TYPE(BufferLoweringSpec)
               VISIT_TYPE(Link)
               VISIT_TYPE(Let)
               VISIT_TYPE(SoLink)
@@ -90,6 +92,7 @@ struct FileContext {
               VISIT_TYPE(Import)
               VISIT_TYPE(ImportBuffer)
               VISIT_TYPE(BufferParser)
+              VISIT_TYPE(BufferLoweringSpec)
               VISIT_TYPE(Link)
               VISIT_TYPE(Let)
               VISIT_TYPE(SoLink)

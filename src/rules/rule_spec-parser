@@ -20,6 +20,7 @@ production Decl {
   pattern ImportBuffer { "import" %id = number "of" %filename = str "as" %name = identifier ";" }
   pattern Let { "let" %name = identifier "=" %value = Expr ";" }
   pattern BufferParser { "buf_parser"  %name = identifier "{" %options = concat { Option } "}" }
+  pattern BufferLoweringSpec { "buf_lowering_spec"  %name = identifier "{" %options = concat { Option } "}" }
   pattern OldParser {"old_parser" %name = identifier "{" %options = concat { Option } "}" }
   pattern OldLoweringSpec { "old_lowering_spec" %name = identifier "{" %options = concat { Option } "}" }
   pattern Library {"lib" %name = identifier "{" %options = concat { Option } "}" }

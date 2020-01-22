@@ -309,6 +309,7 @@ struct ImportDecl;
 struct ImportBufferDecl;
 struct LetDecl;
 struct BufferParserDecl;
+struct BufferLoweringSpecDecl;
 struct OldParserDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
@@ -327,7 +328,7 @@ struct Option;
 
 struct Decl {
   enum class Kind {
-    Import, ImportBuffer, Let, BufferParser, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, Let, BufferParser, BufferLoweringSpec, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -356,6 +357,12 @@ struct LetDecl: public Decl {
 
 struct BufferParserDecl: public Decl {
   BufferParserDecl() : Decl(Kind::BufferParser) {}
+  tok::Token name;
+  std::vector<Option*> options;
+};
+
+struct BufferLoweringSpecDecl: public Decl {
+  BufferLoweringSpecDecl() : Decl(Kind::BufferLoweringSpec) {}
   tok::Token name;
   std::vector<Option*> options;
 };
@@ -581,6 +588,26 @@ if (tokens.peak_check_str("buf_parser")) {
 tokens.expect("buf_parser");
 auto result = ({
 auto __current_self = new BufferParserDecl;__current_self->name = tokens.expect(tok::identifier);
+tokens.expect("{");
+__current_self->options = ([&]{
+std::vector<Option*> __current_vector__;
+    while (true) {
+   if (tokens.peak_check_str("}")) { break; }
+ __current_vector__.push_back([&]{auto result = _production_Option(tokens);
+return result;
+ }());  }
+return __current_vector__;
+}())
+;
+tokens.expect("}");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("buf_lowering_spec")) {
+tokens.expect("buf_lowering_spec");
+auto result = ({
+auto __current_self = new BufferLoweringSpecDecl;__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
