@@ -6,6 +6,9 @@ let lowering_spec = new_parser.lowering_spec;
 let parser_spec = new_parser.parser_spec;
 let tokenizer_spec = new_parser.tokenizer_spec;
 let emit_lowering_spec = new_parser.emit_lowering_spec;
+let lower_to_nfa = new_parser.lower_to_nfa;
+let lower_nfa_to_dfa = new_parser.lower_nfa_to_dfa;
+let lower_parser_to_functions = new_parser.lower_parser_to_functions;
 
 lib lowering_spec_lowering {
   srcs = ["lowering_spec_lowering.cc"];
@@ -29,18 +32,6 @@ lib tokenizer_helper {
 lib regex_passes {
   srcs = ["tokens/regex_nfa_to_dfa.cc", "tokens/goto_dfa_emitter.cc"];
   deps = [tokenizer_spec, lower_to_nfa, lower_nfa_to_dfa];
-}
-
-old_lowering_spec lower_to_nfa {
-  src = "tokens/lower_to_nfa"; cc_out = "lower_to_nfa.cc";
-}
-
-old_lowering_spec lower_nfa_to_dfa {
-  src = "tokens/lower_nfa_to_dfa"; cc_out = "lower_nfa_to_dfa.cc";
-}
-
-old_lowering_spec lower_parser_to_functions {
-  src = "lower_parser_to_functions"; cc_out = "lower_parser_to_functions.cc";
 }
 
 lib parser_lowering {

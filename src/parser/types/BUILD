@@ -1,8 +1,7 @@
 import "src/parser" as parser;
+import 2 of ".gui/parser" as new_parser;
 
-old_lowering_spec emit_type_decls_lowering_spec {
-  src = "emit_type_decls"; cc_out = "emit_type_decls.cc";
-}
+let emit_type_decls_lowering_spec = new_parser.emit_type_decls_lowering_spec;
 
 lib emit_type_decls {
   srcs = ["emit_type_decls.cc"];

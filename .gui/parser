@@ -29,6 +29,32 @@ view "emit_lowering_spec" {
   raw 9;
 }
 
+view "lower_to_nfa" {
+  raw 10;
+}
+
+view "lower_nfa_to_dfa" {
+  raw 11;
+}
+
+view "lower_parser_to_functions" {
+  raw 12;
+}
+
+view "emit_type_decls" {
+  raw 13;
+}
+
+view "emit_parser_lowering_spec" {
+  raw 14;
+}
+view "type_check_lowering_spec" {
+  raw 15;
+}
+view "lower_and_merge_lowering_spec" {
+  raw 16;
+}
+
 #2
 buf_parser lowering_spec {
   parser = 3;
@@ -55,6 +81,41 @@ buf_lowering_spec emit_lowering_spec {
   src = 9;
   gen_dir = ".generated/gen/parser";
   cc_out = "emit_lowering_spec.cc";
+}
+buf_lowering_spec lower_to_nfa {
+  src = 10;
+  gen_dir = ".generated/gen/parser";
+  cc_out = "lower_to_nfa.cc";
+}
+buf_lowering_spec lower_nfa_to_dfa {
+  src = 11;
+  gen_dir = ".generated/gen/parser";
+  cc_out = "lower_nfa_to_dfa.cc";
+}
+buf_lowering_spec lower_parser_to_functions {
+  src = 12;
+  gen_dir = ".generated/gen/parser";
+  cc_out = "lower_parser_to_functions.cc";
+}
+buf_lowering_spec emit_type_decls_lowering_spec {
+  src = 13;
+  gen_dir = ".generated/gen/parser/types";
+  cc_out = "emit_type_decls.cc";
+}
+buf_lowering_spec emit_parser_lowering_spec {
+  src = 14;
+  gen_dir = ".generated/gen/parser/patterns";
+  cc_out = "emit_parser.cc";
+}
+buf_lowering_spec type_check_lowering_spec {
+  src = 15;
+  gen_dir = ".generated/gen/parser/patterns";
+  cc_out = "type_check.cc";
+}
+buf_lowering_spec lower_and_merge_lowering_spec {
+  src = 16;
+  gen_dir = ".generated/gen/parser/patterns";
+  cc_out = "lower_and_merge.cc";
 }
 #3
 module lowering_spec;
@@ -669,4 +730,833 @@ func Emit(stream: Stream, m: Module) -> unit {
   } }
 
   emit { "\n}  // namespace "; m->mod_name.str; "\n"; }
+}
+#10
+module lower_regex_to_nfa;
+
+context let_context : NameDeclMap<RegexDecl>;
+
+func skip(a: Node, b: Node) -> unit { a->edges.push_back(new SkipToEdge { self->next = b; }); }
+
+func lowerToChar(e: RegexExpr) -> char {
+  open e : RegexExpr {
+  case .String:
+    let tmp = Unescaped(e->value.str);
+    assert(tmp.size() == 1, e->value, " is not a single char");
+    return tmp[0];
+  case .Integer:
+    let tmp = fromString(e->value.str);
+    assert(isChar(tmp), e->value, " out of range [0, 255]");
+    return tmp;
+  default:
+    error(e, "is not a single char");
+  }
+}
+func lower(ctx: LetContext, e: RegexExpr) -> NodePair {
+  open e : RegexExpr {
+  case .String:
+    let n = new Node {};
+    let pair = new NodePair { self->st = n; self->ed = n; };
+    for c in Unescaped(e->value.str) {
+      let edge = new UnaryEdge {};
+      edge->match = c;
+      edge->next = new Node {};
+      pair->ed->edges.push_back(edge);
+      pair->ed = edge->next;
+    }
+    return pair;
+  case .Integer:
+    let pair = new NodePair { self->st = new Node {}; self->ed = new Node {}; };
+    let edge = new UnaryEdge {};
+    pair->st->edges.push_back(edge);
+    edge->match = lowerToChar(e);
+    edge->next = pair->ed;
+    return pair;
+  case .Range:
+    let pair = new NodePair { self->st = new Node {}; self->ed = new Node{}; };
+    let edge = new RangeEdge {};
+    pair->st->edges.push_back(edge);
+    edge->start = lowerToChar(e->st);
+    edge->end = lowerToChar(e->ed);
+    edge->next = pair->ed;
+    return pair;
+  case .Juxta:
+    let a = lower(ctx, e->lhs);
+    let b = lower(ctx, e->rhs);
+    skip(a->ed, b->st);
+    return new NodePair { self->st = a->st; self->ed = b->ed; };
+  case .Wrapped: return lower(ctx, e->value);
+  case .Named: return lower(ctx, ctx->find(e->name.str));
+  case .Alt:
+    let pair = new NodePair { self->st = new Node{}; self->ed = new Node{}; };
+    let a = lower(ctx, e->lhs);
+    let b = lower(ctx, e->rhs);
+    skip(pair->st, a->st);
+    skip(pair->st, b->st);
+    skip(a->ed, pair->ed);
+    skip(b->ed, pair->ed);
+    return pair;
+  case .Star:
+    let pair = new NodePair { self->st = new Node{}; self->ed = new Node {}; };
+    let a = lower(ctx, e->base);
+    skip(a->ed, a->st);
+    skip(pair->st, a->st);
+    skip(a->ed, pair->ed);
+    skip(pair->st, pair->ed);
+    return pair;
+  case .Plus:
+    let a = lower(ctx, e->base);
+    skip(a->ed, a->st);
+    return a;
+  }
+}
+
+func rewriteRegexDecl(decl: RegexDecl) -> NFAGraphDecl {
+  scope ctx = new LetContext {} {
+    return new NFAGraphDecl {
+      self->name = decl->name;
+      self->root = new Node {};
+      for i in decl->items {
+        open i : TokenDecl {
+        case .Let: ctx->declare(i->name.str, i->value);
+        case .Import: error("import not supported right now");
+        case .Emit:
+          let nfa = lower(ctx, i->value);
+          skip(self->root, nfa->st);
+          nfa->ed->edges.push_back(new EmitEdge { self->name = i->name; });
+        case .Ignore:
+          let nfa = lower(ctx, i->value);
+          skip(self->root, nfa->st);
+          nfa->ed->edges.push_back(new IgnoreEdge {});
+        }
+      }
+    };
+  }
+}
+#11
+module parser_spec;
+
+func visitSuccessors(ctx: DFAMappingContext, base: Node, states: Array<Node>) -> unit {
+  let c_ctx = new EdgeSetContext {};
+  for state in states { c_ctx->AddWork(state); }
+  loop {
+    if (c_ctx->work_list.empty()) { break; }
+    let node = c_ctx->work_list.back();
+    c_ctx->work_list.pop_back();
+    for e in node->edges {
+      open e : Edge {
+      case .Range: c_ctx->add_edge(e->start, e->end, e->next);
+      case .Unary: c_ctx->add_edge(e->match, e->match, e->next);
+      case .SkipTo: c_ctx->AddWork(e->next);
+      case .Emit: c_ctx->SetEmitOrIgnore(e);
+      case .Ignore: c_ctx->SetEmitOrIgnore(e);
+      case .Unexpected: error(e);
+      }
+    }
+  }
+  for edge in c_ctx->edges {
+    let next = ctx->getNode(Canonicalize(edge.next));
+    if (edge.st == edge.ed) {
+      base->edges.push_back(new UnaryEdge { self->next = next; self->match = edge.ed; });
+    } else {
+      base->edges.push_back(new RangeEdge { self->next = next; self->start = edge.st; self->end = edge.ed; });
+    }
+  }
+  if (c_ctx->emit_or_ignore) {
+    base->edges.push_back(c_ctx->emit_or_ignore);
+  } else {
+    base->edges.push_back(new UnexpectedEdge {});
+  }
+}
+
+func toDFA(root: Node) -> Node {
+  let ctx = new DFAMappingContext {};
+  var states: Array<Node>;
+  states.push_back(root);
+  let result = ctx->getNode(states);
+  loop {
+    if (ctx->work_list.empty()) { break; }
+    let item = ctx->work_list.back();
+    ctx->work_list.pop_back();
+    visitSuccessors(ctx, item.first, item.second);
+  }
+  return result;
+}
+#12
+module production_spec;
+
+func doModuleTypeCheck(globals: ModuleContext, m: Module) -> unit {
+  for decl in m->decls {
+    open decl : Decl {
+    case .DefineWithType:
+      globals->RegisterForTypeChecking(decl);
+    case .Type:
+      globals->RegisterType(decl);
+    default:
+    }
+  }
+  globals->typeCheckAll();
+}
+
+func getTokenizerName(m: Module) -> String {
+  for d in m->decls {
+    open d: Decl {
+    case .Tokenizer: return d->name.str;
+    default:
+    }
+  }
+  return "";
+}
+
+func DebugPrintType(t: TypeDeclExpr) -> unit {
+  open t: TypeDeclExpr {
+  case .Product:
+    dbg_emit { "Invalid"; }
+  case .Sum:
+    dbg_emit { "Invalid"; }
+  case .Named:
+    dbg_emit { t->name.str; }
+  case .Colon:
+    DebugPrintType(t->base);
+    dbg_emit { "::"; t->name.str; }
+  case .Parametric:
+    DebugPrintType(t->base);
+    dbg_emit { "<"; }
+    let notfirst = false;
+    for param in t->params {
+      if (notfirst) { dbg_emit { ", "; } }
+      notfirst = true;
+      DebugPrintType(param);
+    }
+    dbg_emit { ">"; }
+  }
+}
+
+func DebugPrintExpr(e: PatternExpr) -> unit {
+  open e: PatternExpr {
+    case .Named:
+      dbg_emit { e->name.str; }
+    case .New:
+      dbg_emit { "new "; }
+      DebugPrintType(e->type);
+      dbg_emit { " "; }
+      DebugPrintStmt(e->value);
+    case .Pop:
+      dbg_emit{ "pop"; }
+    default:
+      dbg_emit { "Unknown"; }
+  }
+}
+
+func DebugPrintStmt(s: PatternStmt) -> unit {
+  open s: PatternStmt {
+  case .String:
+    dbg_emit { s->value.str; }
+  case .Assign:
+    dbg_emit { "%"; s->name.str; " = "; } DebugPrintExpr(s->value);
+  case .Push:
+    dbg_emit { "push "; } DebugPrintExpr(s->value);
+  case .ExprTailLoop:
+    dbg_emit { "expr_tail_loop("; }
+    DebugPrintExpr(s->base);
+    dbg_emit { ")"; }
+    DebugPrintStmt(s->value);
+  case .Conditional:
+    dbg_emit { "try "; } DebugPrintStmt(s->value); dbg_emit {"\n"; }
+  case .Merge:
+    dbg_emit { "merge?"; }
+  case .Wrap:
+    DebugPrintExpr(s->value);
+  case .Compound:
+    dbg_emit { "{"; }
+    dbg_emit { "\n"; }
+    for item in s->items { DebugPrintStmt(item); }
+    dbg_emit { "\n"; }
+    dbg_emit { "}"; }
+  }
+}
+#13
+module production_spec;
+
+context stream: Stream;
+
+func emitNewType(stream: Stream, t: TypeDeclExpr) -> unit {
+  open t : TypeDeclExpr {
+  case .Named:
+    if (t->name.str == "Token") { error("Cannot new: ", t); return; }
+    if (t->name.str == "Array") { error("Cannot new: ", t); return; }
+    if (t->name.str == "Map") { error("Cannot new: ", t); return; }
+    if (t->name.str == "String") { error("Cannot new: ", t); return; }
+    if (t->name.str == "char") { error("Cannot new: ", t); return; }
+    if (t->name.str == "int") { error("Cannot new: ", t); return; }
+    if (t->name.str == "bool") { error("Cannot new: ", t); return; }
+    emit { "new "; t->name.str; }
+  case .Colon:
+    let sub_t = t->base;
+    open sub_t : TypeDeclExpr {
+    case .Named:
+      emit {"new "; t->name.str; sub_t->name.str; }
+    default:
+      error("Cannot new: ", t);
+    }
+  default:
+    error("Cannot new: ", t);
+  }
+}
+
+func emitTypeExpr(stream: Stream, t: TypeDeclExpr) -> unit {
+  open t : TypeDeclExpr {
+  case .Parametric:
+    emitTypeExpr(t->base);
+    emit { "<"; }
+    let notfirst = false;
+    for param in t->params {
+      if (notfirst) { emit { ", "; } }
+      notfirst = true;
+      emitTypeExpr(param);
+    }
+    emit { ">"; }
+  case .Named:
+    if (t->name.str == "Token") { emit { "tok::Token"; } return; }
+    if (t->name.str == "Array") { emit { "std::vector"; } return; }
+    if (t->name.str == "Map") { emit { "std::map"; } return; }
+    if (t->name.str == "String") { emit { "string_view"; } return; }
+    if (t->name.str == "char") { emit { "char"; } return; }
+    if (t->name.str == "int") { emit { "int"; } return; }
+    if (t->name.str == "bool") { emit { "bool"; } return; }
+    emit { t->name.str; "*"; }
+  case .Colon:
+    let sub_t = t->base;
+    open sub_t : TypeDeclExpr {
+    case .Named:
+      emit {t->name.str; sub_t->name.str; "*"; }
+    default:
+      error("Do not understand: ", t);
+    }
+  default:
+    error("Do not understand: ", t);
+  }
+}
+
+func emitStructBody(stream: Stream, t: ProductTypeDeclExpr) -> unit {
+  for subdecl in t->decls {
+    emit { "  "; }
+    emitTypeExpr(subdecl->type);
+    emit { " "; subdecl->name.str; ";\n"; }
+  }
+}
+
+func ImplicitDumpTypes(stream: Stream, m: Module) -> unit {
+  emit { "namespace "; m->mod_name.str; "{\n"; }
+  for decl in m->decls {
+    open decl : Decl {
+    case .Type:
+      emit { "struct "; decl->name.str; ";\n"; }
+      let type = decl->type;
+      open type : TypeDeclExpr {
+      case .Sum:
+        for subdecl in type->decls {
+          emit { "struct "; subdecl->name.str; decl->name.str; ";\n"; }
+        }
+      default:
+      }
+    default:
+    }
+  }
+
+  for decl in m->decls {
+    open decl: Decl {
+    case .Type:
+      let type = decl->type;
+      open type : TypeDeclExpr {
+      case .Sum:
+        emit { "\nstruct "; decl->name.str; " {\n"; }
+        emit { "  enum class Kind {\n   "; }
+        for subdecl in type->decls { emit { " "; subdecl->name.str; ","; } }
+        emit {
+          "\n  };\n";
+          "  "; decl->name.str; "(Kind kind) : kind_(kind) {}\n";
+          " Kind getKind() { return kind_; }\n";
+          " private:\n";
+          "  Kind kind_;\n";
+          "};\n";
+        }
+        for subdecl in type->decls {
+          let subt = subdecl->type;
+          open subt : TypeDeclExpr {
+          case .Product:
+            emit {
+              "\nstruct "; subdecl->name.str; decl->name.str; ": public "; decl->name.str; " {\n";
+              "  "; subdecl->name.str; decl->name.str; "()";
+              " : "; decl->name.str; "(Kind::"; subdecl->name.str; ") {}\n";
+            }
+            emitStructBody(subt);
+            emit { "};\n"; }
+          default:
+            error("Do not understand: ", t);
+          }
+        }
+      case .Product:
+        emit { "\nstruct "; decl->name.str; " {\n"; }
+        emitStructBody(type);
+        emit { "};\n"; }
+      default:
+        error("Do not understand: ", t);
+      }
+    default:
+    }
+  }
+
+  emit { "}  // namespace "; m->mod_name.str; "\n"; }
+}
+#14
+module production_spec;
+
+context emit_ctx: EmitContext;
+
+context stream: Stream;
+
+func productionName(stream: Stream, d: DefineWithTypeDecl) -> unit {
+  emit { "_production_"; d->name.str; }
+}
+
+func emitSanitizedPatternExpr(stream: Stream, emit_ctx: EmitContext, expr: PatternExpr) -> unit {
+  open expr: PatternExpr {
+  case .New:
+    emit { "({\n"; }
+    emit { "auto __current_self = "; }
+    emitNewType(stream, expr->type);
+    emit { ";"; }
+    emitSanitizedPatternStmt(expr->value);
+    emit {
+      "__current_self;\n";
+      "})";
+    }
+  case .Named:
+    if (emit_ctx->globals->isToken(expr->name.str)) {
+      emit { "tokens.expect(tok::"; expr->name.str; ")"; }
+    } else {
+      emit { "_production_"; expr->name.str; "(tokens)"; }
+    }
+  case .Pop:
+    emit { "_tmp_"; emit_ctx->Pop(); }
+  case .CommaConcat:
+    let emit_ctx = emit_ctx->ConcatContext();
+    let type = emit_ctx->TypeCheck(expr->element);
+    emit { "([&]{\n"; "std::vector<"; }
+    emitTypeExpr(stream, type);
+    emit { "> __current_vector__;\n"; }
+    let succ = emit_ctx->GetSuccessor(expr);
+    if (succ) {
+      open succ: PatternStmt {
+      case .String:
+        emit {"   if (!tokens.peak_check_str("; succ->value.str; "))"; }
+      default:
+        error(succ, " must be constant string");
+      }
+    } else {
+      emit { "   if (!tokens.peak_check(tok::eof))"; }
+    }
+    emit { " {\n"; }
+    emit { "    while (true) {\n"; }
+    emit { " __current_vector__.push_back([&]{"; }
+    emitSanitizedPatternStmt(expr->element);
+    emitResultIfPresent();
+    emit { " }());"; }
+    emit { " if (tokens.peak_check(tok::"; expr->comma.str; ")) {\n"; }
+    emit { "   tokens.expect(tok::"; expr->comma.str; ");\n"; }
+    emit { " } else { break; }\n"; }
+    emit { "  }}return __current_vector__;\n}())\n"; }
+  case .Concat:
+    let emit_ctx = emit_ctx->ConcatContext();
+    let type = emit_ctx->TypeCheck(expr->element);
+    emit { "([&]{\n"; "std::vector<"; }
+    emitTypeExpr(stream, type);
+    emit { "> __current_vector__;\n"; }
+    emit { "    while (true) {\n"; }
+    let succ = emit_ctx->GetSuccessor(expr);
+    if (succ) {
+      open succ: PatternStmt {
+      case .String:
+        emit {"   if (tokens.peak_check_str("; succ->value.str; "))"; }
+      default:
+        error(succ, " must be constant string");
+      }
+    } else {
+      emit { "   if (tokens.peak_check(tok::eof))"; }
+    }
+    emit { " { break; }\n"; }
+    emit { " __current_vector__.push_back([&]{"; }
+    emitSanitizedPatternStmt(expr->element);
+    emitResultIfPresent();
+    emit { " }());"; }
+    emit { "  }\nreturn __current_vector__;\n}())\n"; }
+  case .Self:
+    emit { "(0 /* unknown expr*/)"; }
+  }
+}
+
+func emitResultIfPresent(stream: Stream, emit_ctx: EmitContext) -> unit {
+  if (emit_ctx->has_result) {
+    if (emit_ctx->is_inside_expr) {
+      emit { "expr_result = result;\ncontinue;\n"; }
+    } else {
+      emit { "return result;\n"; }
+    }
+  } else {
+    emit { "tokens.unexpected();\n"; }
+  }
+}
+
+func emitConditionalArg(stream: Stream, emit_ctx: EmitContext, expr: PatternExpr) -> unit {
+  open expr: PatternExpr {
+  case .Named:
+    if (emit_ctx->globals->isToken(expr->name.str)) {
+      emit { "tokens.peak_check(tok::"; expr->name.str; ")"; }
+    } else {
+      error("Cannot handle as peak_expr: ", expr, " // not token");
+    }
+  default:
+    error("Cannot handle as peak_expr: ", expr);
+  }
+}
+
+
+func emitSanitizedPatternStmt(stream: Stream, emit_ctx: EmitContext, s: PatternStmt) -> unit {
+  open s: PatternStmt {
+  case .String:
+    emit { "tokens.expect("; s->value.str; ");\n"; }
+  case .Assign:
+    emit { "__current_self->"; s->name.str; " = "; }
+    emitSanitizedPatternExpr(s->value);
+    emit { ";\n"; }
+  case .Push:
+    let next_id = emit_ctx->Push();
+    emit { "auto _tmp_"; next_id; " = "; }
+    emitSanitizedPatternExpr(s->value);
+    emit { ";\n"; }
+  case .Wrap:
+    emit_ctx->has_result = true;
+    emit { "auto result = "; }
+    emitSanitizedPatternExpr(s->value);
+    emit { ";\n"; }
+  case .Compound:
+    emit_ctx->RegisterConcatSuccessors(s->items);
+    for stmt in s->items {
+      emitSanitizedPatternStmt(stmt);
+    }
+  case .Conditional:
+    let emit_ctx = emit_ctx->NewConditionalContext();
+    emit { "if ("; }
+    let peak_s = getFirstItem(s->value);
+    open peak_s: PatternStmt {
+    case .String:
+      emit { "tokens.peak_check_str("; peak_s->value.str; ")"; }
+    case .Push:
+      emitConditionalArg(peak_s->value);
+    case .Assign:
+      emitConditionalArg(peak_s->value);
+    case .ExprTailLoop:
+      error("Cannot handle ExprTailLoop as peak_expr: ", peak_s);
+    case .Wrap:
+      DebugPrintExpr(peak_s->value);
+      dbg_emit { "\n"; }
+      error("Cannot handle Wrap as peak_expr: ", peak_s);
+    default:
+      error("Cannot handle as peak_expr: ", peak_s);
+    }
+    emit { ") {\n"; }
+    emitSanitizedPatternStmt(s->value);
+    emitResultIfPresent();
+    emit { "}\n"; }
+  case .Merge:
+    error(s, " merge is not supported");
+  case .ExprTailLoop:
+    let emit_ctx = emit_ctx->NewExprTailLoopContext();
+    emitTypeExpr(stream, s->type);
+    emit { " expr_result = "; }
+    emitSanitizedPatternExpr(s->base);
+    emit { ";\n"; }
+    emit { "while (true) {\n"; }
+    let next_id = emit_ctx->Push();
+    emit { "auto _tmp_"; next_id; " = expr_result;"; }
+    emitSanitizedPatternStmt(s->value);
+    emit { "return expr_result;\n"; }
+    emit { "}\n"; }
+  }
+}
+
+func emitBasics(stream: Stream, globals: ModuleContext, m: Module, is_header: bool) -> unit {
+  emit { "namespace "; m->mod_name.str; "{\n"; }
+  emit { "namespace parser {\n"; }
+  for decl in m->decls {
+    open decl : Decl {
+    case .DefineWithType:
+      emitTypeExpr(stream, decl->type);
+      emit { " "; }
+      productionName(decl);
+      emit { "(Tokenizer& tokens);\n"; }
+    case .Entry:
+      let entry_type = new NamedTypeDeclExpr { self->name = decl->name; };
+      emitTypeExpr(stream, entry_type);
+      emit { " DoParse(Tokenizer& tokens);\n"; }
+    default:
+    }
+  }
+
+if (is_header) {
+} else {
+  for decl in m->decls {
+    open decl : Decl {
+    case .DefineWithType:
+      let emit_ctx = EmitContext::makeRoot(globals);
+      emitTypeExpr(stream, decl->type);
+      emit { " "; }
+      productionName(decl);
+      emit { "(Tokenizer& tokens) {\n"; }
+      emitSanitizedPatternStmt(decl->value);
+      emitResultIfPresent();
+      emit { "}\n"; }
+    case .Entry:
+      let entry_type = new NamedTypeDeclExpr { self->name = decl->name; };
+      emitTypeExpr(stream, entry_type);
+      emit { " DoParse(Tokenizer& tokens) {\n"; }
+      emit { "  return _production_"; decl->name.str; "(tokens);\n"; }
+      emit { "}\n"; }
+    default:
+    }
+  }
+}
+
+  emit { "}  // namespace parser\n"; }
+  emit { "}  // namespace "; m->mod_name.str; "\n"; }
+}
+#15
+module production_spec;
+
+context tc_ctx: TypeCheckContext;
+context field_tc_ctx: FieldTypeCheckContext;
+
+func collectTypeFields(field_tc_ctx: FieldTypeCheckContext, tc_ctx: TypeCheckContext, stmt: PatternStmt) -> unit {
+  open stmt: PatternStmt {
+  case .Compound:
+    for cstmt in stmt->items { collectTypeFields(cstmt); }
+  case .Push:
+    tc_ctx->Push(doTypeCheckExpr(stmt->value));
+  case .String:
+  case .Assign:
+    field_tc_ctx->setField(stmt->name.str, doTypeCheckExpr(stmt->value));
+  default:
+    error("stmt not supported: ", stmt);
+  }
+}
+
+func doTypeCheckExpr(tc_ctx: TypeCheckContext, expr: PatternExpr) -> TypeDeclExpr {
+  open expr: PatternExpr {
+  case .CommaConcat:
+    let globals = tc_ctx->globals;
+    let tc_ctx = tc_ctx->ConcatContext();
+    let element_ty = globals->CacheType(expr->element, doTypeCheck(expr->element));
+    return new ParametricTypeDeclExpr {
+      self->base = theArrayType;
+      self->params.push_back(element_ty);
+    };
+  case .Concat:
+    let globals = tc_ctx->globals;
+    let tc_ctx = tc_ctx->ConcatContext();
+    let element_ty = globals->CacheType(expr->element, doTypeCheck(expr->element));
+    return new ParametricTypeDeclExpr {
+      self->base = theArrayType;
+      self->params.push_back(element_ty);
+    };
+  case .Self:
+    return tc_ctx->getSelfType();
+  case .New:
+    let field_tc_ctx = tc_ctx->newTypeCtx();
+    collectTypeFields(expr->value);
+    field_tc_ctx->DoVerify(expr->type);
+    return expr->type;
+  case .Pop:
+    return tc_ctx->Pop();
+  case .Named:
+    if (tc_ctx->globals->isToken(expr->name.str)) {
+      return theTokenType;
+    }
+    return tc_ctx->globals->getType(expr->name.str);
+  }
+  error("trouble type-checking");
+}
+
+func doTypeCheck(tc_ctx: TypeCheckContext, s: PatternStmt) -> TypeDeclExpr {
+  open s: PatternStmt {
+  case .Wrap:
+    return doTypeCheckExpr(s->value);
+  case .Compound:
+    var type: TypeDeclExpr;
+    type = nullptr;
+    for stmt in s->items {
+       let tmp = doTypeCheck(stmt);
+       if (tmp) {
+         if (type) {
+           DebugPrintStmt(s);
+           error("Compound can only have one type", tmp);
+         } else {
+           type = tmp;
+         }
+       }
+    }
+    return type;
+  case .Push:
+    tc_ctx->Push(doTypeCheckExpr(s->value));
+    return nullptr;
+  case .Conditional:
+    let tc_ctx = tc_ctx->NewConditionalContext();
+    doTypeCheck(s->value);
+    return nullptr;
+  case .ExprTailLoop:
+    tc_ctx->Push(s->type);
+    doTypeCheck(s->value);
+    return nullptr;
+  default:
+    return nullptr;
+  }
+}
+#16
+module production_spec;
+
+func getValue(s: PatternStmt) -> PatternExpr {
+  open s: PatternStmt {
+  case .Assign: return s->value;
+  case .Push: return s->value;
+  case .Wrap: return s->value;
+  default: return nullptr;
+  }
+}
+
+func findSuccessorForExpr(expr: PatternExpr, stmt: PatternStmt) -> PatternStmt {
+  open expr: PatternExpr {
+  case .New: return findSuccessor(expr->value);
+  case .Named: return stmt;
+  case .Pop: return nullptr;
+  case .CommaConcat: return stmt;
+  case .Concat: return stmt;
+  case .Self: return stmt;
+  }
+}
+
+func findSuccessor(s: PatternStmt) -> PatternStmt {
+  open s: PatternStmt {
+    case .String: return s;
+    case .Merge: return s;
+    case .ExprTailLoop: return s;
+    case .Conditional: return s;
+    case .Compound:
+      for stmt in s->items {
+        let succ = findSuccessor(stmt);
+        if (succ) { return succ; }
+      }
+      return nullptr;
+    case .Wrap: return findSuccessorForExpr(s->value, s);
+    case .Assign: return findSuccessorForExpr(s->value, s);
+    case .Push: return findSuccessorForExpr(s->value, s);
+  }
+}
+
+func makeTryStmtFromPattern(subdecl: PatternDecl, base_type: TypeDeclExpr) -> PatternStmt {
+  let subt = new ColonTypeDeclExpr {
+    self->base = base_type;
+    self->name = subdecl->name;
+  };
+  return new ConditionalPatternStmt {
+    self->value = new CompoundPatternStmt {
+      self->items.push_back(new WrapPatternStmt {
+        self->value = new NewPatternExpr {
+          self->type = subt;
+          self->value = subdecl->value;
+        };
+      });
+    };
+  };
+}
+
+func lowerProductionToMergeDecl(m: Module, globals: ModuleContext, d: Decl) -> Decl {
+  open d: Decl {
+  case .Define:
+    return new DefineWithTypeDecl {
+      self->name = d->name;
+      let type = new NamedTypeDeclExpr { self->name = d->name; };
+      self->type = type;
+      self->value = new WrapPatternStmt {
+        self->value = new NewPatternExpr {
+          self->type = type;
+          self->value = d->value;
+        };
+      };
+    };
+  case .Expr:
+    let base_type = new NamedTypeDeclExpr { self->name = d->name; };
+    let last_group_name = DoExprAnalysis(m, globals, d, base_type);
+    return new DefineWithTypeDecl {
+      self->name = d->name;
+      self->type = base_type;
+      self->value = new CompoundPatternStmt {
+        self->items.push_back(new WrapPatternStmt {
+          self->value = new NamedPatternExpr {
+            self->name = last_group_name;
+          };
+        });
+      };
+    };
+  case .Production:
+    return new DefineWithTypeDecl {
+      self->name = d->name;
+      let base_type = new NamedTypeDeclExpr { self->name = d->name; };
+      self->type = base_type;
+      self->value = RotateAndVerifyTrys(globals, new CompoundPatternStmt {
+        for subdecl in d->stmts {
+          open subdecl: Decl {
+          case .Pattern:
+            self->items.push_back(makeTryStmtFromPattern(subdecl, base_type));
+          default:
+            error("Only patterns allowed in exprs...");
+          }
+        }
+      });
+    };
+  case .ProductionAndType:
+    return new DefineWithTypeDecl {
+      self->name = d->name;
+      let base_type = d->type;
+      self->type = base_type;
+      self->value = RotateAndVerifyTrys(globals, new CompoundPatternStmt {
+        for subdecl in d->stmts {
+          open subdecl: Decl {
+          case .Pattern:
+            self->items.push_back(makeTryStmtFromPattern(subdecl, base_type));
+          default:
+            error("Only patterns allowed in exprs...");
+          }
+        }
+      });
+    };
+  case .Pattern:
+    return new DefineWithTypeDecl {
+      self->name = d->name;
+      self->type = nullptr;
+      self->value = d->value;
+    };
+  case .Type: return d;
+  case .DefineWithType: return d;
+  case .Entry: return d;
+  case .Tokenizer: return d;
+  default:
+    error("Not allowed at top level", d);
+  }
+}
+
+func lowerProductionToMerge(globals: ModuleContext, m: Module) -> Module {
+  return new Module {
+    self->mod_name = m->mod_name;
+    for decl in m->decls { self->decls.push_back(lowerProductionToMergeDecl(self, globals, decl)); }
+  };
 }
