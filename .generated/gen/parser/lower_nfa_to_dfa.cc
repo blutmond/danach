@@ -1,11 +1,11 @@
 namespace parser_spec {
 
-void visitSuccessors(DFAMappingContext* ctx, Node* base, std::vector<Node*> states);
-Node* toDFA(Node* root);
+void visitSuccessors(ASTContext* ast, DFAMappingContext* ctx, Node* base, std::vector<Node*> states);
+Node* toDFA(ASTContext* ast, Node* root);
 
-void visitSuccessors(DFAMappingContext* ctx, Node* base, std::vector<Node*> states) {
+void visitSuccessors(ASTContext* ast, DFAMappingContext* ctx, Node* base, std::vector<Node*> states) {
 auto __tmp__c_ctx = ({
-auto* self = new EdgeSetContext;
+auto* self = ast->New<EdgeSetContext>();
 self;
 });
 auto c_ctx = std::move(__tmp__c_ctx);
@@ -66,14 +66,14 @@ auto __tmp__next = ctx->getNode(Canonicalize(edge.next));
 auto next = std::move(__tmp__next);
 if (edge.st == edge.ed) {
 base->edges.push_back(({
-auto* self = new UnaryEdge;
+auto* self = ast->New<UnaryEdge>();
 self->next = next;
 self->match = edge.ed;
 self;
 }));
 } else {
 base->edges.push_back(({
-auto* self = new RangeEdge;
+auto* self = ast->New<RangeEdge>();
 self->next = next;
 self->start = edge.st;
 self->end = edge.ed;
@@ -85,14 +85,15 @@ if (c_ctx->emit_or_ignore) {
 base->edges.push_back(c_ctx->emit_or_ignore);
 } else {
 base->edges.push_back(({
-auto* self = new UnexpectedEdge;
+auto* self = ast->New<UnexpectedEdge>();
 self;
 }));
 }
 }
-Node* toDFA(Node* root) {
+Node* toDFA(ASTContext* ast, Node* root) {
 auto __tmp__ctx = ({
-auto* self = new DFAMappingContext;
+auto* self = ast->New<DFAMappingContext>();
+self->ctx = ast;
 self;
 });
 auto ctx = std::move(__tmp__ctx);
@@ -106,7 +107,7 @@ break;
 auto __tmp__item = ctx->work_list.back();
 auto item = std::move(__tmp__item);
 ctx->work_list.pop_back();
-visitSuccessors(ctx, item.first, item.second);
+visitSuccessors(ast, ctx, item.first, item.second);
 }
 return result;
 }

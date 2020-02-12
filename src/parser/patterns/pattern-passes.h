@@ -32,6 +32,13 @@ struct ModuleContext {
     return t;
   }
 
+  ASTContext* ast_context;
+
+  template <typename T>
+  T* New() { return ast_context->New<T>(); }
+  template <typename T>
+  T* New(const T& t) { return ast_context->New<T>(t); }
+
   Module* m;
 
   std::map<string_view, TypeDecl*> known_types;
@@ -42,8 +49,8 @@ struct ModuleContext {
       auto* ref = reinterpret_cast<NamedTypeDeclExpr*>(struct_typeref);
       auto it = known_types.find(ref->name.str);
       if (it == known_types.end()) {
-        auto* res = *new_type = new ProductTypeDeclExpr;
-        auto* decl = new TypeDecl;
+        auto* res = *new_type = New<ProductTypeDeclExpr>();
+        auto* decl = New<TypeDecl>();
         decl->name = ref->name;
         decl->type = res;
         known_types[ref->name.str] = decl;
@@ -63,8 +70,8 @@ struct ModuleContext {
           return reinterpret_cast<ProductTypeDeclExpr*>(res);
         }
       }
-      auto* res = *new_type = new ProductTypeDeclExpr;
-      auto* entry = new TypeLetDecl;
+      auto* res = *new_type = New<ProductTypeDeclExpr>();
+      auto* entry = New<TypeLetDecl>();
       entry->name = ref->name;
       entry->type = res;
       base->decls.push_back(entry);
@@ -78,8 +85,8 @@ struct ModuleContext {
       auto* ref = reinterpret_cast<NamedTypeDeclExpr*>(struct_typeref);
       auto it = known_types.find(ref->name.str);
       if (it == known_types.end()) {
-        auto* res = new SumTypeDeclExpr;
-        auto* decl = new TypeDecl;
+        auto* res = New<SumTypeDeclExpr>();
+        auto* decl = New<TypeDecl>();
         decl->name = ref->name;
         decl->type = res;
         known_types[ref->name.str] = decl;

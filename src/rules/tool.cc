@@ -2,12 +2,17 @@
 #include "rules/rule-invoker.h"
 #include "rules/compiler.h"
 
+extern bool use_asan;
 int main(int argc, char **argv) {
   using namespace rule_spec;
   
   if (argc <= 2) {
     fprintf(stderr, "Not enough arguments: %d.\n", argc);
     exit(-1);
+  }
+
+  if (argc == 4 && argv[3] == string_view("--asan")) {
+    use_asan = true;
   }
 
   rules::GlobalContext ctx;

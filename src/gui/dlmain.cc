@@ -399,13 +399,13 @@ void WindowState::InitEvents() {
     buffers.emplace_back(std::make_unique<Buffer>(std::move(id_b.buffer)));
   }
 
+  ASTContext ctx;
   auto view_manifest_str = Collapse(*buffers[1]);
-  view_manifest::Tokenizer tokens(view_manifest_str.c_str());
+  view_manifest::Tokenizer tokens(ctx, view_manifest_str.c_str());
   auto* m = view_manifest::parser::DoParse(tokens);
 
   auto get_chunk = [&](view_manifest::ChunkSrc* src) -> Buffer* {
     int id = stoi(std::string(src->id.str));
-    delete src;
     assert(id >= 0 && id < buffers.size());
     return buffers[id].get();
   };
@@ -422,7 +422,6 @@ void WindowState::InitEvents() {
         auto* action = reinterpret_cast<RawAction*>(action_);
         view.buffers.push_back(get_chunk(action->id));
         view.decorations.push_back({});
-        delete action;
         break;
       } case Action::Kind::DefineFunc: {
         auto* action = reinterpret_cast<DefineFuncAction*>(action_);
@@ -431,15 +430,12 @@ void WindowState::InitEvents() {
         view.decorations.push_back({});
         view.decorations.push_back({false});
         view.gaps.push_back(0);
-        delete action;
       }
       }
       ++i;
     }
 
-    delete decl;
   }
-  delete m;
 }
 
 WindowState::WindowState(GtkWidget* window_inp, GtkWidget* drawing_area_inp,

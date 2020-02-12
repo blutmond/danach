@@ -11,7 +11,7 @@ struct TokenizerPreEmit {
   std::set<string_view> all_tokens;
 };
 
-Module* LowerToNFA(Module* m);
+Module* LowerToNFA(ASTContext& ast_ctx, Module* m);
 
 TokenizerPreEmit* FetchTokenizer(Module* m, string_view name);
 

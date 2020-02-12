@@ -68,8 +68,9 @@ exit(-1);
 });
 return;
 }
-stream << ("new ");
+stream << ("tokens.New<");
 stream << (t->name.str);
+stream << (">()");
 break;
 } case TypeDeclExpr::Kind::Colon: {
 auto* t = reinterpret_cast<ColonTypeDeclExpr*>(__tmp_switch_name);
@@ -82,9 +83,10 @@ switch (sub_t->getKind()) {
 case TypeDeclExpr::Kind::Named: {
 auto* sub_t = reinterpret_cast<NamedTypeDeclExpr*>(__tmp_switch_name);
 (void)sub_t;
-stream << ("new ");
+stream << ("tokens.New<");
 stream << (t->name.str);
 stream << (sub_t->name.str);
+stream << (">()");
 break;
 } default: {
 ({

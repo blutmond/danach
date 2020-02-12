@@ -7,7 +7,7 @@
 
 namespace parser {
 
-production_spec::ModuleContext* DoAnalysis(production_spec::Module*& m_parser,
+production_spec::ModuleContext* DoAnalysis(ASTContext& ast_ctx, production_spec::Module*& m_parser,
                                            parser_spec::Module*& m_tokens);
 
 void EmitParser(std::ostream& stream, production_spec::Module* m_parser,

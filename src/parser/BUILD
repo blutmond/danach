@@ -26,7 +26,7 @@ link "lowering-spec-tool-dynamic" {
 }
 
 lib tokenizer_helper {
-  srcs = ["tokenizer_helper.cc"];
+  srcs = ["tokenizer_helper.cc", "ast-context.cc"];
 }
 
 lib regex_passes {

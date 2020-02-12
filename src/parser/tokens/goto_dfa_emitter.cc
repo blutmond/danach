@@ -186,7 +186,7 @@ Token GetNext(const char*& cur))"; if (is_header) { stream << ";\n"; } else { st
     stream << "} // namespace tok\n";
     stream << R"(
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -234,7 +234,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;

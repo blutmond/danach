@@ -4,10 +4,11 @@
 
 namespace parser {
 
-production_spec::ModuleContext* DoAnalysis(production_spec::Module*& m_parser,
+production_spec::ModuleContext* DoAnalysis(ASTContext& ast_ctx, production_spec::Module*& m_parser,
                                            parser_spec::Module*& m_tokens) {
   auto* ctx = new production_spec::ModuleContext;
-  m_tokens = parser_spec::LowerToNFA(m_tokens);
+  ctx->ast_context = &ast_ctx;
+  m_tokens = parser_spec::LowerToNFA(ast_ctx, m_tokens);
   auto* tokenizer = parser_spec::FetchTokenizer(m_tokens, getTokenizerName(m_parser));
   ctx->all_tokens = tokenizer->all_tokens;
 
@@ -16,6 +17,7 @@ production_spec::ModuleContext* DoAnalysis(production_spec::Module*& m_parser,
   ctx->m = m_parser;
   production_spec::doModuleTypeCheck(ctx, m_parser);
 
+  delete tokenizer;
   return ctx;
 }
 
@@ -25,7 +27,8 @@ void EmitParser(std::ostream& stream, production_spec::Module* m_parser,
   if (is_header) {
     stream << "#pragma once\n";
   }
-  stream << "#include \"parser/parser-support.h\"\n\n";
+  stream << "#include \"parser/parser-support.h\"\n";
+  stream << "#include \"parser/ast-context.h\"\n\n";
   stream << "namespace " << m_parser->mod_name.str << " {\n";
   auto* tokenizer = parser_spec::FetchTokenizer(m_tokens, getTokenizerName(m_parser));
   EmitTokenizer(tokenizer, stream, is_header);
@@ -33,6 +36,7 @@ void EmitParser(std::ostream& stream, production_spec::Module* m_parser,
   production_spec::ImplicitDumpTypes(stream, m_parser);
 
   production_spec::emitBasics(stream, ctx, m_parser, is_header);
+  delete tokenizer;
 }
 
 }  // namespace parser

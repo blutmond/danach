@@ -76,30 +76,33 @@ std::string GetName(rule_spec::Decl* decl) {
   }
 }
 
-rule_spec::Module* ReadRuleFile(string_view path) {
-  rule_spec::Tokenizer tokens((new std::string{LoadFile(std::string(path) + "/BUILD")})->c_str());
+rule_spec::Module* ReadRuleFile(ASTContext& ast_context, string_view path) {
+  rule_spec::Tokenizer tokens(ast_context, ast_context.RegisterFileContents({LoadFile(std::string(path) + "/BUILD")}));
   return rule_spec::parser::DoParse(tokens);
 }
 
-LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>& deps,
+LibraryBuildResult *SimpleCompileCXXFile(ASTContext& ctx, const std::vector<LibraryBuildResult*>& deps,
                                          string_view folder, const std::vector<string_view>& srcs) {
-  return SimpleCompileCXXFile(deps, folder, ".build/objects/" + std::string(folder), srcs);
+  return SimpleCompileCXXFile(ctx, deps, folder, ".build/objects/" + std::string(folder), srcs);
 }
 
 void EmitParserGenRaw(const std::string& parser, const std::string& tokenizer,
                       std::ostream& h_stream,
                       std::ostream& cc_stream) {
-  production_spec::Tokenizer tokens(parser.c_str());
+  ASTContext ast_ctx;
+  production_spec::Tokenizer tokens(ast_ctx, parser.c_str());
   auto* m = production_spec::parser::DoParse(tokens);
 
-  parser_spec::Tokenizer tokens_tok(tokenizer.c_str());
+  parser_spec::Tokenizer tokens_tok(ast_ctx, tokenizer.c_str());
   auto* m2 = parser_spec::parser::DoParse(tokens_tok);
 
-  auto* ctx = parser::DoAnalysis(m, m2);
+  auto* ctx = parser::DoAnalysis(ast_ctx, m, m2);
   
   // Actual Emit...
   parser::EmitParser(cc_stream, m, m2, ctx, /* is_header= */ false);
   parser::EmitParser(h_stream, m, m2, ctx, /* is_header= */ true);
+
+  delete ctx;
 }
 
 void EmitParserGen(const char* parser, const char* tokenizer,
@@ -109,11 +112,12 @@ void EmitParserGen(const char* parser, const char* tokenizer,
 }
 
 void SimpleOldLoweringSpecGenRaw(const std::string& contents, const std::string& outname) {
-  lowering_spec::Tokenizer tokens(contents.c_str());
+  ASTContext ast_ctx;
+  lowering_spec::Tokenizer tokens(ast_ctx, contents.c_str());
   auto* m = lowering_spec::parser::DoParse(tokens);
 
   EmitStream stream;
-  lowering_spec::Emit(stream.stream(), m);
+  lowering_spec::Emit(&ast_ctx, stream.stream(), m);
   stream.write(outname);
 }
 
@@ -204,14 +208,14 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::BufferPa
   std::string h_out = GetStringOption(options["h_out"]);
   std::string gen_dir = GetStringOption(options["gen_dir"]);
 
-  DoMkdir(strdup(gen_dir));
+  DoMkdir(ast_ctx().strdup(gen_dir));
   EmitStream h_stream;
   EmitStream cc_stream;
   EmitParserGenRaw(parser, tokenizer, h_stream.stream(), cc_stream.stream());
   cc_stream.write(gen_dir + "/" + cc_out);
   h_stream.write(gen_dir + "/" + h_out);
 
-  return SimpleCompileCXXFile({parent->default_flags, parent->GetRule("src/parser", "tokenizer_helper")},
+  return SimpleCompileCXXFile(ast_ctx(), {parent->default_flags, parent->GetRule("src/parser", "tokenizer_helper")},
                               gen_dir, {cc_out}); 
 }
 
@@ -224,14 +228,14 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldParse
   auto cc_out = GetStringOption(options["cc_out"]);
   std::string h_out = GetStringOption(options["h_out"]);
 
-  DoMkdir(strdup(".generated/" + filename_gen));
+  DoMkdir(ast_ctx().strdup(".generated/" + filename_gen));
   EmitStream h_stream;
   EmitStream cc_stream;
-  EmitParserGen(strdup(filename + "/" + parser),
-                strdup(filename + "/" + tokenizer), h_stream.stream(), cc_stream.stream());
+  EmitParserGen(ast_ctx().strdup(filename + "/" + parser),
+                ast_ctx().strdup(filename + "/" + tokenizer), h_stream.stream(), cc_stream.stream());
   cc_stream.write(".generated/" + filename_gen + "/" + cc_out);
   h_stream.write(".generated/" + filename_gen + "/" + h_out);
-  return SimpleCompileCXXFile({parent->default_flags, parent->GetRule("src/parser", "tokenizer_helper")},
+  return SimpleCompileCXXFile(ast_ctx(), {parent->default_flags, parent->GetRule("src/parser", "tokenizer_helper")},
                               ".generated/" + filename_gen, {cc_out}); 
 
 }
@@ -243,10 +247,10 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::BufferLo
   auto gen_dir = GetStringOption(options["gen_dir"]);
   auto cc_out = GetStringOption(options["cc_out"]);
 
-  DoMkdir(strdup(gen_dir));
+  DoMkdir(ast_ctx().strdup(gen_dir));
   SimpleOldLoweringSpecGenRaw(src, gen_dir + "/" + cc_out);
 
-  return new LibraryBuildResult; 
+  return ast_ctx().New<LibraryBuildResult>(); 
 }
 LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldLoweringSpecDecl* decl) {
   auto filename_gen = GetGeneratedFilename();
@@ -255,10 +259,10 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldLower
   auto src = GetStringOption(options["src"]);
   auto cc_out = GetStringOption(options["cc_out"]);
 
-  DoMkdir(strdup(".generated/" + filename_gen));
-  SimpleOldLoweringSpecGen(strdup(filename + "/" + src), ".generated/" + filename_gen + "/" + cc_out);
+  DoMkdir(ast_ctx().strdup(".generated/" + filename_gen));
+  SimpleOldLoweringSpecGen(ast_ctx().strdup(filename + "/" + src), ".generated/" + filename_gen + "/" + cc_out);
 
-  return new LibraryBuildResult; 
+  return ast_ctx().New<LibraryBuildResult>(); 
 }
 LibraryBuildResult* FileContext::Eval(string_view name, rule_spec::LibraryDecl* decl) {
   auto options = IndexOptionSet(filename, name, decl->options, {"deps", "srcs", "hdrs"});
@@ -270,12 +274,12 @@ LibraryBuildResult* FileContext::Eval(string_view name, rule_spec::LibraryDecl* 
   }
   auto deps = ProcessLibraryBuildResultList(options["deps"]);
   deps.push_back(parent->default_flags);
-  return SimpleCompileCXXFile(deps, filename, srcs_copy); 
+  return SimpleCompileCXXFile(ast_ctx(), deps, filename, srcs_copy); 
 }
 
 unit FileContext::Eval(string_view rule_name, rule_spec::SoLinkDecl* decl) {
   LinkCommand out;
-  out.output_name = strdup(".build/" + std::string(rule_name));
+  out.output_name = ast_ctx().strdup(".build/" + std::string(rule_name));
   auto options = IndexOptionSet(filename, rule_name, decl->options, {"deps"});
   out.deps = ProcessLibraryBuildResultList(options["deps"]);
   out.deps.push_back(parent->so_flags);
@@ -284,7 +288,7 @@ unit FileContext::Eval(string_view rule_name, rule_spec::SoLinkDecl* decl) {
 }
 unit FileContext::Eval(string_view rule_name, rule_spec::LinkDecl* decl) {
   LinkCommand out;
-  out.output_name = strdup(".build/" + std::string(rule_name));
+  out.output_name = ast_ctx().strdup(".build/" + std::string(rule_name));
   auto options = IndexOptionSet(filename, rule_name, decl->options, {"deps"});
   out.deps = ProcessLibraryBuildResultList(options["deps"]);
   BuildLinkCommand(&out);
@@ -315,7 +319,7 @@ FileContext* GlobalContext::GetFile(string_view base) {
   auto* result = &cache[key];
   result->parent = this;
   result->filename = key;
-  for (auto* decl : ReadRuleFile(base)->decls) {
+  for (auto* decl : ReadRuleFile(ctx, base)->decls) {
     result->data[GetName(decl)] = decl;
   }
   return result;
@@ -330,11 +334,14 @@ FileContext* VirtualFileCollection::GetFile(int64_t key) {
   result->filename = ".generated/ide-gen";
   result->filename_key = key;
 
-  rule_spec::Tokenizer tokens((new std::string{buffer[key].text})->c_str());
+  rule_spec::Tokenizer tokens(parent->ctx, parent->ctx.RegisterFileContents(buffer[key].text));
   for (auto* decl : rule_spec::parser::DoParse(tokens)->decls) {
     result->data[GetName(decl)] = decl;
   }
   return result;
 }
 
+ASTContext& FileContext::ast_ctx() const {
+  return parent->ctx;
+}
 }  // namespace rules

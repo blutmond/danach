@@ -1,4 +1,5 @@
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace rule_spec {
 namespace tok {
@@ -249,7 +250,7 @@ bb1:
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -297,7 +298,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -470,7 +474,7 @@ Expr* _production_Expr_group_0(Tokenizer& tokens) {
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
-auto __current_self = new NameExpr;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<NameExpr>();__current_self->name = _tmp_0;
 __current_self;
 });
 return result;
@@ -478,7 +482,7 @@ return result;
 if (tokens.peak_check(tok::str)) {
 auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
-auto __current_self = new StringLiteralExpr;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<StringLiteralExpr>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -486,7 +490,7 @@ return result;
 if (tokens.peak_check(tok::number)) {
 auto _tmp_0 = tokens.expect(tok::number);
 auto result = ({
-auto __current_self = new IntegerLiteralExpr;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<IntegerLiteralExpr>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -494,7 +498,7 @@ return result;
 if (tokens.peak_check_str("[")) {
 tokens.expect("[");
 auto result = ({
-auto __current_self = new ArrayLiteralExpr;__current_self->values = ([&]{
+auto __current_self = tokens.New<ArrayLiteralExpr>();__current_self->values = ([&]{
 std::vector<Expr*> __current_vector__;
    if (!tokens.peak_check_str("]")) {
     while (true) {
@@ -519,7 +523,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str(".")) {
 tokens.expect(".");
 auto result = ({
-auto __current_self = new DotExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<DotExpr>();__current_self->base = _tmp_0;
 __current_self->name = tokens.expect(tok::identifier);
 __current_self;
 });
@@ -536,7 +540,7 @@ return result;
 }
 Option* _production_Option(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Option;__current_self->key = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<Option>();__current_self->key = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->value = _production_Expr(tokens);
 tokens.expect(";");
@@ -550,7 +554,7 @@ tokens.expect("import");
 if (tokens.peak_check(tok::str)) {
 auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
-auto __current_self = new ImportDecl;__current_self->path = _tmp_0;
+auto __current_self = tokens.New<ImportDecl>();__current_self->path = _tmp_0;
 tokens.expect("as");
 __current_self->name = tokens.expect(tok::identifier);
 tokens.expect(";");
@@ -561,7 +565,7 @@ return result;
 if (tokens.peak_check(tok::number)) {
 auto _tmp_0 = tokens.expect(tok::number);
 auto result = ({
-auto __current_self = new ImportBufferDecl;__current_self->id = _tmp_0;
+auto __current_self = tokens.New<ImportBufferDecl>();__current_self->id = _tmp_0;
 tokens.expect("of");
 __current_self->filename = tokens.expect(tok::str);
 tokens.expect("as");
@@ -576,7 +580,7 @@ tokens.unexpected();
 if (tokens.peak_check_str("let")) {
 tokens.expect("let");
 auto result = ({
-auto __current_self = new LetDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<LetDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->value = _production_Expr(tokens);
 tokens.expect(";");
@@ -587,7 +591,7 @@ return result;
 if (tokens.peak_check_str("buf_parser")) {
 tokens.expect("buf_parser");
 auto result = ({
-auto __current_self = new BufferParserDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<BufferParserDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -607,7 +611,7 @@ return result;
 if (tokens.peak_check_str("buf_lowering_spec")) {
 tokens.expect("buf_lowering_spec");
 auto result = ({
-auto __current_self = new BufferLoweringSpecDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<BufferLoweringSpecDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -627,7 +631,7 @@ return result;
 if (tokens.peak_check_str("old_parser")) {
 tokens.expect("old_parser");
 auto result = ({
-auto __current_self = new OldParserDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<OldParserDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -647,7 +651,7 @@ return result;
 if (tokens.peak_check_str("old_lowering_spec")) {
 tokens.expect("old_lowering_spec");
 auto result = ({
-auto __current_self = new OldLoweringSpecDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<OldLoweringSpecDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -667,7 +671,7 @@ return result;
 if (tokens.peak_check_str("lib")) {
 tokens.expect("lib");
 auto result = ({
-auto __current_self = new LibraryDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<LibraryDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -687,7 +691,7 @@ return result;
 if (tokens.peak_check_str("passes")) {
 tokens.expect("passes");
 auto result = ({
-auto __current_self = new PassesDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<PassesDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -707,7 +711,7 @@ return result;
 if (tokens.peak_check_str("passes_meta")) {
 tokens.expect("passes_meta");
 auto result = ({
-auto __current_self = new PassesTemplateDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<PassesTemplateDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -727,7 +731,7 @@ return result;
 if (tokens.peak_check_str("link")) {
 tokens.expect("link");
 auto result = ({
-auto __current_self = new LinkDecl;__current_self->fname = tokens.expect(tok::str);
+auto __current_self = tokens.New<LinkDecl>();__current_self->fname = tokens.expect(tok::str);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -747,7 +751,7 @@ return result;
 if (tokens.peak_check_str("solink")) {
 tokens.expect("solink");
 auto result = ({
-auto __current_self = new SoLinkDecl;__current_self->fname = tokens.expect(tok::str);
+auto __current_self = tokens.New<SoLinkDecl>();__current_self->fname = tokens.expect(tok::str);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;
@@ -768,7 +772,7 @@ tokens.unexpected();
 }
 Module* _production_Module(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Module;__current_self->decls = ([&]{
+auto __current_self = tokens.New<Module>();__current_self->decls = ([&]{
 std::vector<Decl*> __current_vector__;
     while (true) {
    if (tokens.peak_check(tok::eof)) { break; }

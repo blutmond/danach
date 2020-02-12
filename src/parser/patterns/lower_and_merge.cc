@@ -8,9 +8,9 @@ void emitTypeExpr(TypeDeclExpr* t);
 PatternExpr* getValue(PatternStmt* s);
 PatternStmt* findSuccessor(PatternStmt* s);
 
-PatternStmt* RotateFront(CompoundPatternStmt* stmt);
+PatternStmt* RotateFront(ModuleContext* globals, CompoundPatternStmt* stmt);
 
-PatternStmt* RotateFront(PatternExpr*& expr) {
+PatternStmt* RotateFront(ModuleContext* globals, PatternExpr*& expr) {
   switch (expr->getKind()) {
   case PatternExpr::Kind::CommaConcat:
   case PatternExpr::Kind::Concat:
@@ -18,27 +18,27 @@ PatternStmt* RotateFront(PatternExpr*& expr) {
     exit(-1);
   case PatternExpr::Kind::Named:
   case PatternExpr::Kind::Self: {
-    auto* res = new PushPatternStmt;
+    auto* res = globals->New<PushPatternStmt>();
     res->value = expr;
-    expr = new PopPatternExpr;
+    expr = globals->New<PopPatternExpr>();
     return res;
   } case PatternExpr::Kind::New: {
     auto* cexpr = reinterpret_cast<NewPatternExpr*>(expr);
     assert(cexpr->value->getKind() == PatternStmt::Kind::Compound);
-    return RotateFront(
+    return RotateFront(globals,
         reinterpret_cast<CompoundPatternStmt*>(cexpr->value));
   } case PatternExpr::Kind::Pop:
     return nullptr;
   }
 }
 
-PatternStmt* RotateFront(CompoundPatternStmt* stmt) {
+PatternStmt* RotateFront(ModuleContext* globals, CompoundPatternStmt* stmt) {
   // if isCleanSuccessor(stmt->items[0]) return stmt;
   for (size_t i = 0; i < stmt->items.size(); ++i) {
     auto* item = stmt->items[i];
     switch (item->getKind()) {
     case PatternStmt::Kind::Compound:
-      return RotateFront(reinterpret_cast<CompoundPatternStmt*>(item));
+      return RotateFront(globals, reinterpret_cast<CompoundPatternStmt*>(item));
       break;
     case PatternStmt::Kind::String:
     case PatternStmt::Kind::Push:
@@ -47,11 +47,11 @@ PatternStmt* RotateFront(CompoundPatternStmt* stmt) {
       break;
     case PatternStmt::Kind::Assign: {
       auto* cstmt = reinterpret_cast<AssignPatternStmt*>(item);
-      if (auto* res = RotateFront(cstmt->value)) return res;
+      if (auto* res = RotateFront(globals, cstmt->value)) return res;
       break;
     } case PatternStmt::Kind::Wrap: {
       auto* cstmt = reinterpret_cast<WrapPatternStmt*>(item);
-      if (auto* res = RotateFront(cstmt->value)) return res;
+      if (auto* res = RotateFront(globals, cstmt->value)) return res;
       break;
     } case PatternStmt::Kind::Merge:
       std::cerr << "Not supported!!\n";
@@ -70,6 +70,7 @@ PatternStmt* RotateFront(CompoundPatternStmt* stmt) {
   return nullptr;
 }
 
+/*
 PatternStmt* RotateFrontTry(PatternStmt* stmt) {
   if (stmt->getKind() != PatternStmt::Kind::Conditional) return nullptr;
   auto* cstmt = reinterpret_cast<ConditionalPatternStmt*>(stmt);
@@ -83,6 +84,7 @@ CompoundPatternStmt* RotateCompound(CompoundPatternStmt* stmt) {
   stmt->items.insert(stmt->items.begin(), child);
   return stmt;
 }
+*/
 
 CompoundPatternStmt* getTryChild(PatternStmt* cstmt) {
   assert(cstmt->getKind() == PatternStmt::Kind::Conditional);
@@ -159,7 +161,7 @@ void InsertIntoGroups(PatternStmt* key, PatternStmt* item,
 Grouping doGrouping(ModuleContext* globals, const std::vector<PatternStmt*>& items) {
   Grouping out;
   for (auto* item : items) {
-    InsertIntoGroups(RotateFront(getTryChild(item)), item, out);
+    InsertIntoGroups(RotateFront(globals, getTryChild(item)), item, out);
   }
   return out;
 }
@@ -203,8 +205,8 @@ void Distinguish(ModuleContext* globals, std::vector<PatternStmt*> prefix,
           }
         } else {
           Distinguish(globals, {group.common}, group.items);
-          auto* tmp1 = new ConditionalPatternStmt;
-          auto* tmp2 = new CompoundPatternStmt;
+          auto* tmp1 = globals->New<ConditionalPatternStmt>();
+          auto* tmp2 = globals->New<CompoundPatternStmt>();
           tmp1->value = tmp2;
           tmp2->items = std::move(group.items);
           items.push_back(tmp1);
@@ -224,9 +226,9 @@ CompoundPatternStmt* RotateAndVerifyTrys(ModuleContext* globals, CompoundPattern
   return stmt;
 }
 
-tok::Token WrapToken(tok::Token base, size_t id) {
+tok::Token WrapToken(ModuleContext* globals, tok::Token base, size_t id) {
   auto* tmp = 
-      new std::string(std::string(base.str) + "_group_" + std::to_string(id));
+      globals->New<std::string>(std::string(base.str) + "_group_" + std::to_string(id));
   tok::Token res;
   res.str = string_view(*tmp);
   return res;
@@ -322,13 +324,13 @@ struct ExprGroup {
   }
 };
 
-PatternStmt* makeTryStmtFromPattern(PatternDecl* subdecl, TypeDeclExpr* base_type);
+PatternStmt* makeTryStmtFromPattern(ModuleContext* globals, PatternDecl* subdecl, TypeDeclExpr* base_type);
 
 void DebugPrintStmt(PatternStmt*);
 
-PatternExpr* getExprProd(tok::Token base, size_t id) {
-  auto* res = new NamedPatternExpr;
-  res->name = WrapToken(base, id);
+PatternExpr* getExprProd(ModuleContext* globals, tok::Token base, size_t id) {
+  auto* res = globals->New<NamedPatternExpr>();
+  res->name = WrapToken(globals, base, id);
   return res;
 }
 
@@ -381,60 +383,60 @@ tok::Token DoExprAnalysis(Module* m, ModuleContext* globals, ExprDecl* decl, Typ
       assert(i > 0 && "Binary ops nonsensical on first level");
       assert(grouped.binary.size() == group.patterns.size() && "Must be all binary or nothing");
       auto child_i = group.assoc == ExprGroup::RightToLeft ? i : i - 1;
-      auto* lit_body = new CompoundPatternStmt;
+      auto* lit_body = globals->New<CompoundPatternStmt>();
       for (auto& binary : grouped.binary) {
         assert(binary->getKind() == Decl::Kind::Pattern);
         auto* subdecl = reinterpret_cast<PatternDecl*>(binary);
-        auto* copy = new PatternDecl(*subdecl);
-        auto* bodycopy = new CompoundPatternStmt(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
+        auto* copy = globals->New<PatternDecl>(*subdecl);
+        auto* bodycopy = globals->New<CompoundPatternStmt>(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
         copy->value = bodycopy;
 
         {
           auto* tmp = bodycopy->items[0];
           assert(tmp->getKind() == PatternStmt::Kind::Assign);
           auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
-          assign_tmp->value = new PopPatternExpr;
+          assign_tmp->value = globals->New<PopPatternExpr>();
         }
         
         {
           auto* tmp = bodycopy->items.back();
           assert(tmp->getKind() == PatternStmt::Kind::Assign);
           auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
-          assign_tmp->value = getExprProd(decl->name, child_i);
+          assign_tmp->value = getExprProd(globals, decl->name, child_i);
         }
 
-        lit_body->items.push_back(makeTryStmtFromPattern(copy, base_type));
+        lit_body->items.push_back(makeTryStmtFromPattern(globals, copy, base_type));
       }
       if (group.assoc == ExprGroup::RightToLeft) {
         if (i != 0) {
-          auto* tmp1 = new ConditionalPatternStmt;
-          auto* tmp2 = new CompoundPatternStmt;
+          auto* tmp1 = globals->New<ConditionalPatternStmt>();
+          auto* tmp2 = globals->New<CompoundPatternStmt>();
           tmp1->value = tmp2;
-          auto* res = new WrapPatternStmt;
-          res->value = new PopPatternExpr;
+          auto* res = globals->New<WrapPatternStmt>();
+          res->value = globals->New<PopPatternExpr>();
           tmp2->items.push_back(res);
           lit_body->items.push_back(tmp1);
         }
 
-        auto* cdecl = new DefineWithTypeDecl;
-        cdecl->name = WrapToken(decl->name, i);
+        auto* cdecl = globals->New<DefineWithTypeDecl>();
+        cdecl->name = WrapToken(globals, decl->name, i);
         cdecl->type = base_type; 
         lit_body = RotateAndVerifyTrys(globals, lit_body);
-        auto* push_prefix = new PushPatternStmt;
-        push_prefix->value = getExprProd(decl->name, i - 1);
+        auto* push_prefix = globals->New<PushPatternStmt>();
+        push_prefix->value = getExprProd(globals, decl->name, i - 1);
         lit_body->items.insert(lit_body->items.begin(), push_prefix);
         cdecl->value = lit_body;
         m->decls.push_back(cdecl);
         ++i;
       } else {
         assert(group.assoc == ExprGroup::LeftToRight && "Binary ops must have associativity");
-        auto* cdecl = new DefineWithTypeDecl;
-        cdecl->name = WrapToken(decl->name, i);
+        auto* cdecl = globals->New<DefineWithTypeDecl>();
+        cdecl->name = WrapToken(globals, decl->name, i);
         cdecl->type = base_type; 
-        auto* tmp = new CompoundPatternStmt;
-        auto* expr_tail_expr = new ExprTailLoopPatternStmt;
+        auto* tmp = globals->New<CompoundPatternStmt>();
+        auto* expr_tail_expr = globals->New<ExprTailLoopPatternStmt>();
         expr_tail_expr->type = base_type;
-        expr_tail_expr->base = getExprProd(decl->name, i - 1);
+        expr_tail_expr->base = getExprProd(globals, decl->name, i - 1);
         expr_tail_expr->value = RotateAndVerifyTrys(globals, lit_body);
         tmp->items.push_back(expr_tail_expr);
         cdecl->value = tmp;
@@ -443,66 +445,66 @@ tok::Token DoExprAnalysis(Module* m, ModuleContext* globals, ExprDecl* decl, Typ
       }
     } else {
       assert(grouped.binary.size() == 0 && "Binary ops not handled\n");
-      auto* lit_body = new CompoundPatternStmt;
+      auto* lit_body = globals->New<CompoundPatternStmt>();
       for (auto& prefix : grouped.prefix) {
         assert(prefix->getKind() == Decl::Kind::Pattern);
         auto* subdecl = reinterpret_cast<PatternDecl*>(prefix);
-        auto* copy = new PatternDecl(*subdecl);
-        auto* bodycopy = new CompoundPatternStmt(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
+        auto* copy = globals->New<PatternDecl>(*subdecl);
+        auto* bodycopy = globals->New<CompoundPatternStmt>(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
         copy->value = bodycopy;
         auto* tmp = bodycopy->items.back();
         assert(tmp->getKind() == PatternStmt::Kind::Assign);
         auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
-        assign_tmp->value = getExprProd(decl->name, i);
-        lit_body->items.push_back(makeTryStmtFromPattern(copy, base_type));
+        assign_tmp->value = getExprProd(globals, decl->name, i);
+        lit_body->items.push_back(makeTryStmtFromPattern(globals, copy, base_type));
       }
 
       for (auto& literal : grouped.literal) {
         assert(literal->getKind() == Decl::Kind::Pattern);
-        lit_body->items.push_back(makeTryStmtFromPattern(reinterpret_cast<PatternDecl*>(literal), base_type));
+        lit_body->items.push_back(makeTryStmtFromPattern(globals, reinterpret_cast<PatternDecl*>(literal), base_type));
       }
       
       if (!lit_body->items.empty()) {
         if (i != 0) {
-          auto* tmp1 = new ConditionalPatternStmt;
-          auto* tmp2 = new CompoundPatternStmt;
+          auto* tmp1 = globals->New<ConditionalPatternStmt>();
+          auto* tmp2 = globals->New<CompoundPatternStmt>();
           tmp1->value = tmp2;
-          auto* res = new WrapPatternStmt;
-          res->value = getExprProd(decl->name, i - 1);
+          auto* res = globals->New<WrapPatternStmt>();
+          res->value = getExprProd(globals, decl->name, i - 1);
           tmp2->items.push_back(res);
           lit_body->items.push_back(tmp1);
         }
 //        assert(i == 0 && "TODO: non 0 literals...");
-        auto* cdecl = new DefineWithTypeDecl;
-        cdecl->name = WrapToken(decl->name, i);
+        auto* cdecl = globals->New<DefineWithTypeDecl>();
+        cdecl->name = WrapToken(globals, decl->name, i);
         cdecl->type = base_type; 
         cdecl->value = RotateAndVerifyTrys(globals, lit_body);
         m->decls.push_back(cdecl);
         ++i;
       }
 
-      lit_body = new CompoundPatternStmt;
+      lit_body = globals->New<CompoundPatternStmt>();
       for (auto& postfix : grouped.postfix) {
         assert(postfix->getKind() == Decl::Kind::Pattern);
         auto* subdecl = reinterpret_cast<PatternDecl*>(postfix);
-        auto* copy = new PatternDecl(*subdecl);
-        auto* bodycopy = new CompoundPatternStmt(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
+        auto* copy = globals->New<PatternDecl>(*subdecl);
+        auto* bodycopy = globals->New<CompoundPatternStmt>(*reinterpret_cast<CompoundPatternStmt*>(copy->value));
         copy->value = bodycopy;
         auto* tmp = bodycopy->items[0];
         assert(tmp->getKind() == PatternStmt::Kind::Assign);
         auto* assign_tmp = reinterpret_cast<AssignPatternStmt*>(tmp);
-        assign_tmp->value = new PopPatternExpr;
-        lit_body->items.push_back(makeTryStmtFromPattern(copy, base_type));
+        assign_tmp->value = globals->New<PopPatternExpr>();
+        lit_body->items.push_back(makeTryStmtFromPattern(globals, copy, base_type));
       }
 
       if (!lit_body->items.empty()) {
-        auto* cdecl = new DefineWithTypeDecl;
-        cdecl->name = WrapToken(decl->name, i);
+        auto* cdecl = globals->New<DefineWithTypeDecl>();
+        cdecl->name = WrapToken(globals, decl->name, i);
         cdecl->type = base_type; 
-        auto* tmp = new CompoundPatternStmt;
-        auto* expr_tail_expr = new ExprTailLoopPatternStmt;
+        auto* tmp = globals->New<CompoundPatternStmt>();
+        auto* expr_tail_expr = globals->New<ExprTailLoopPatternStmt>();
         expr_tail_expr->type = base_type;
-        expr_tail_expr->base = getExprProd(decl->name, i - 1);
+        expr_tail_expr->base = getExprProd(globals, decl->name, i - 1);
         expr_tail_expr->value = RotateAndVerifyTrys(globals, lit_body);
         tmp->items.push_back(expr_tail_expr);
         cdecl->value = tmp;
@@ -511,7 +513,7 @@ tok::Token DoExprAnalysis(Module* m, ModuleContext* globals, ExprDecl* decl, Typ
       }
     }
   }
-  return WrapToken(decl->name, i - 1);
+  return WrapToken(globals, decl->name, i - 1);
 }
 
 }  // namespace production_spec

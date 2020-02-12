@@ -1,5 +1,6 @@
 #pragma once
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace lowering_spec {
 namespace tok {
@@ -21,7 +22,7 @@ Token GetNext(const char*& cur);
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -69,7 +70,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -99,6 +103,7 @@ struct Decl;
 struct ContextDecl;
 struct FuncDecl;
 struct Expr;
+struct NewArenaExpr;
 struct NewExpr;
 struct NumberExpr;
 struct StrExpr;
@@ -253,12 +258,19 @@ struct FuncDecl: public Decl {
 
 struct Expr {
   enum class Kind {
-    New, Number, Str, Named, Dot, Arrow, Index, ColonColon, Call, CompEqEq, Assign,
+    NewArena, New, Number, Str, Named, Dot, Arrow, Index, ColonColon, Call, CompEqEq, Assign,
   };
   Expr(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
  private:
   Kind kind_;
+};
+
+struct NewArenaExpr: public Expr {
+  NewArenaExpr() : Expr(Kind::NewArena) {}
+  tok::Token arena_name;
+  TypeRef* type;
+  Stmt* body;
 };
 
 struct NewExpr: public Expr {

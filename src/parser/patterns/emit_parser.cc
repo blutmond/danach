@@ -16,13 +16,13 @@ struct EmitContext {
 
 
   EmitContext* ConcatContext() {
-    auto* res = new EmitContext;
+    auto* res = globals->New<EmitContext>();
     res->globals = globals;
     return res;
   }
 
   static EmitContext* makeRoot(ModuleContext* globals) {
-    auto* res = new EmitContext;
+    auto* res = globals->New<EmitContext>();
     res->globals = globals;
     return res;
   }
@@ -32,7 +32,7 @@ struct EmitContext {
     if (it != globals->types_cache.end()) {
       return it->second;
     }
-    auto* res = new NamedTypeDeclExpr;
+    auto* res = globals->New<NamedTypeDeclExpr>();
     res->name.str = "Unknown";
     return res;
   }
@@ -45,13 +45,13 @@ struct EmitContext {
   }
 
   EmitContext* NewConditionalContext() {
-    auto* result = new EmitContext(*this);
+    auto* result = globals->New<EmitContext>(*this);
     result->has_result = false;
     return result;
   }
 
   EmitContext* NewExprTailLoopContext() {
-    auto* result = new EmitContext(*this);
+    auto* result = globals->New<EmitContext>(*this);
     result->is_inside_expr = true;
     return result;
   }

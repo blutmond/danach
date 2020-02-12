@@ -4,6 +4,7 @@
 
 namespace parser_spec {
 
+/*
 std::string Unescaped(string_view data) {
   std::string out;
   // TODO: This is bad (unsafe)
@@ -26,6 +27,7 @@ std::string Unescaped(string_view data) {
   out.append(data.data(), data.size());
   return out;
 }
+*/
 
 int fromString(string_view data) {
   int v = 0;
@@ -109,6 +111,7 @@ struct EdgeSetContext {
 };
 
 struct DFAMappingContext {
+  ASTContext* ctx;
   std::map<std::vector<Node*>, Node*> state_map;
   std::vector<std::pair<Node*, std::vector<Node*>>> work_list;
 
@@ -116,7 +119,7 @@ struct DFAMappingContext {
     std::sort(states.begin(), states.end());
     auto it = state_map.find(states);
     if (it == state_map.end()) {
-      auto* node = new Node;
+      auto* node = ctx->New<Node>();
       work_list.push_back({node, states});
       return state_map[states] = node;
     }
@@ -154,9 +157,10 @@ class LetContext {
 
 namespace parser_spec {
 struct LoweringToNFA {
+  ASTContext* ctx;
   NFAGraphDecl* rewriteDecl(RegexDecl* decl) {
-    auto* result = lower_regex_to_nfa::rewriteRegexDecl(decl);
-    result->root = toDFA(result->root);
+    auto* result = lower_regex_to_nfa::rewriteRegexDecl(ctx, decl);
+    result->root = toDFA(ctx, result->root);
     return result;
   }
   Decl* visit(Decl* decl) {
@@ -168,7 +172,7 @@ struct LoweringToNFA {
     }
   }
   Module* visit(Module* m) {
-    auto* result = new Module;
+    auto* result = ctx->New<Module>();
     result->mod_name = m->mod_name;
     for (auto* decl : m->decls) {
       result->decls.push_back(visit(decl));
@@ -177,8 +181,8 @@ struct LoweringToNFA {
   }
 };
 
-Module* LowerToNFA(Module* m) {
-  return LoweringToNFA().visit(m);
+Module* LowerToNFA(ASTContext& ast_ctx, Module* m) {
+  return LoweringToNFA({&ast_ctx}).visit(m);
 }
 
 }  // namespace parser_spec

@@ -349,7 +349,7 @@ break;
 auto* decl = reinterpret_cast<EntryDecl*>(__tmp_switch_name);
 (void)decl;
 auto __tmp__entry_type = ({
-auto* self = new NamedTypeDeclExpr;
+auto* self = globals->New<NamedTypeDeclExpr>();
 self->name = decl->name;
 self;
 });
@@ -385,7 +385,7 @@ break;
 auto* decl = reinterpret_cast<EntryDecl*>(__tmp_switch_name);
 (void)decl;
 auto __tmp__entry_type = ({
-auto* self = new NamedTypeDeclExpr;
+auto* self = globals->New<NamedTypeDeclExpr>();
 self->name = decl->name;
 self;
 });

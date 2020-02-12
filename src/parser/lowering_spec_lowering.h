@@ -4,6 +4,6 @@
 
 namespace lowering_spec {
 
-void Emit(std::ostream &stream, Module* module);
+void Emit(ASTContext* ctx, std::ostream &stream, Module* module);
 
 }  // namespace lowering_spec

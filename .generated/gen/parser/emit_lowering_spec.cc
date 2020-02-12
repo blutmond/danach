@@ -6,7 +6,7 @@ void EmitExpr(std::ostream& stream, ContextFinderContext* ctx, Expr* expr);
 void EmitStmt(std::ostream& stream, ContextFinderContext* ctx, Stmt* stmt);
 void EmitFuncDeclHeader(std::ostream& stream, FuncDecl* decl);
 void EmitFuncDecl(std::ostream& stream, ContextFinderContext* ctx, FuncDecl* decl);
-void Emit(std::ostream& stream, Module* m);
+void Emit(ASTContext* ast, std::ostream& stream, Module* m);
 
 void EmitType(std::ostream& stream, TypeRef* t) {
 {
@@ -118,6 +118,18 @@ auto* expr = reinterpret_cast<NewExpr*>(__tmp_switch_name);
 stream << ("({\nauto* self = new ");
 EmitType(stream, expr->type);
 stream << (";\n");
+EmitStmt(stream, ctx, expr->body);
+stream << ("self;\n");
+stream << ("})");
+break;
+} case Expr::Kind::NewArena: {
+auto* expr = reinterpret_cast<NewArenaExpr*>(__tmp_switch_name);
+(void)expr;
+stream << ("({\nauto* self = ");
+stream << (expr->arena_name.str);
+stream << ("->New<");
+EmitType(stream, expr->type);
+stream << (">();\n");
 EmitStmt(stream, ctx, expr->body);
 stream << ("self;\n");
 stream << ("})");
@@ -585,12 +597,12 @@ stream << (" {\n");
 EmitStmt(stream, ctx, decl->body);
 stream << ("}\n");
 }
-void Emit(std::ostream& stream, Module* m) {
+void Emit(ASTContext* ast, std::ostream& stream, Module* m) {
 stream << ("namespace ");
 stream << (m->mod_name.str);
 stream << (" {\n\n");
 auto __tmp__ctx = ({
-auto* self = new ContextFinderContext;
+auto* self = ast->New<ContextFinderContext>();
 self;
 });
 auto ctx = std::move(__tmp__ctx);

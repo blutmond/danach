@@ -1,4 +1,5 @@
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace parser_spec {
 namespace tok {
@@ -237,7 +238,7 @@ bb1:
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -285,7 +286,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -511,7 +515,7 @@ RegexExpr* _production_RegexExpr_group_0(Tokenizer& tokens) {
 if (tokens.peak_check(tok::number)) {
 auto _tmp_0 = tokens.expect(tok::number);
 auto result = ({
-auto __current_self = new IntegerRegexExpr;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<IntegerRegexExpr>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -519,7 +523,7 @@ return result;
 if (tokens.peak_check(tok::str)) {
 auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
-auto __current_self = new StringRegexExpr;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<StringRegexExpr>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -532,7 +536,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str(":")) {
 tokens.expect(":");
 auto result = ({
-auto __current_self = new RangeRegexExpr;__current_self->st = _tmp_0;
+auto __current_self = tokens.New<RangeRegexExpr>();__current_self->st = _tmp_0;
 __current_self->ed = _production_RegexExpr_group_0(tokens);
 __current_self;
 });
@@ -547,7 +551,7 @@ RegexExpr* _production_RegexExpr_group_2(Tokenizer& tokens) {
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
-auto __current_self = new NamedRegexExpr;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<NamedRegexExpr>();__current_self->name = _tmp_0;
 __current_self;
 });
 return result;
@@ -555,7 +559,7 @@ return result;
 if (tokens.peak_check_str("(")) {
 tokens.expect("(");
 auto result = ({
-auto __current_self = new WrappedRegexExpr;__current_self->value = _production_RegexExpr(tokens);
+auto __current_self = tokens.New<WrappedRegexExpr>();__current_self->value = _production_RegexExpr(tokens);
 tokens.expect(")");
 __current_self;
 });
@@ -571,7 +575,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str("*")) {
 tokens.expect("*");
 auto result = ({
-auto __current_self = new StarRegexExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<StarRegexExpr>();__current_self->base = _tmp_0;
 __current_self;
 });
 expr_result = result;
@@ -580,7 +584,7 @@ continue;
 if (tokens.peak_check_str("+")) {
 tokens.expect("+");
 auto result = ({
-auto __current_self = new PlusRegexExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<PlusRegexExpr>();__current_self->base = _tmp_0;
 __current_self;
 });
 expr_result = result;
@@ -596,7 +600,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str(".")) {
 tokens.expect(".");
 auto result = ({
-auto __current_self = new JuxtaRegexExpr;__current_self->lhs = _tmp_0;
+auto __current_self = tokens.New<JuxtaRegexExpr>();__current_self->lhs = _tmp_0;
 __current_self->rhs = _production_RegexExpr_group_3(tokens);
 __current_self;
 });
@@ -613,7 +617,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str("|")) {
 tokens.expect("|");
 auto result = ({
-auto __current_self = new AltRegexExpr;__current_self->lhs = _tmp_0;
+auto __current_self = tokens.New<AltRegexExpr>();__current_self->lhs = _tmp_0;
 __current_self->rhs = _production_RegexExpr_group_4(tokens);
 __current_self;
 });
@@ -632,7 +636,7 @@ TokenDecl* _production_TokenDecl(Tokenizer& tokens) {
 if (tokens.peak_check_str("let")) {
 tokens.expect("let");
 auto result = ({
-auto __current_self = new LetTokenDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<LetTokenDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->value = _production_RegexExpr(tokens);
 tokens.expect(";");
@@ -643,7 +647,7 @@ return result;
 if (tokens.peak_check_str("emit")) {
 tokens.expect("emit");
 auto result = ({
-auto __current_self = new EmitTokenDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<EmitTokenDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->value = _production_RegexExpr(tokens);
 tokens.expect(";");
@@ -654,7 +658,7 @@ return result;
 if (tokens.peak_check_str("ignore")) {
 tokens.expect("ignore");
 auto result = ({
-auto __current_self = new IgnoreTokenDecl;__current_self->value = _production_RegexExpr(tokens);
+auto __current_self = tokens.New<IgnoreTokenDecl>();__current_self->value = _production_RegexExpr(tokens);
 tokens.expect(";");
 __current_self;
 });
@@ -663,7 +667,7 @@ return result;
 if (tokens.peak_check_str("import")) {
 tokens.expect("import");
 auto result = ({
-auto __current_self = new ImportTokenDecl;__current_self->module = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<ImportTokenDecl>();__current_self->module = tokens.expect(tok::identifier);
 tokens.expect(".");
 __current_self->name = tokens.expect(tok::identifier);
 tokens.expect(";");
@@ -678,7 +682,7 @@ tokens.unexpected();
 }
 Node* _production_Node(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Node;__current_self->edges = ([&]{
+auto __current_self = tokens.New<Node>();__current_self->edges = ([&]{
 std::vector<Edge*> __current_vector__;
     while (true) {
    if (tokens.peak_check(tok::eof)) { break; }
@@ -696,7 +700,7 @@ Decl* _production_Decl(Tokenizer& tokens) {
 if (tokens.peak_check_str("regex")) {
 tokens.expect("regex");
 auto result = ({
-auto __current_self = new RegexDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<RegexDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->items = ([&]{
 std::vector<TokenDecl*> __current_vector__;
@@ -716,7 +720,7 @@ return result;
 if (tokens.peak_check_str("nfa_grap")) {
 tokens.expect("nfa_grap");
 auto result = ({
-auto __current_self = new NFAGraphDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<NFAGraphDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->root = _production_Node(tokens);
 tokens.expect(";");
@@ -728,7 +732,7 @@ tokens.unexpected();
 }
 Module* _production_Module(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Module;tokens.expect("module");
+auto __current_self = tokens.New<Module>();tokens.expect("module");
 __current_self->mod_name = tokens.expect(tok::identifier);
 tokens.expect(";");
 __current_self->decls = ([&]{

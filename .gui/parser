@@ -77,6 +77,7 @@ buf_parser tokenizer_spec {
   cc_out = "tokenizer-spec.cc";
   h_out = "tokenizer-spec.h";
 }
+
 buf_lowering_spec emit_lowering_spec {
   src = 9;
   gen_dir = ".generated/gen/parser";
@@ -131,6 +132,7 @@ expr TypeRef {
 }
 
 expr Expr {
+  pattern NewArena { "new" "[" %arena_name = identifier "]" %type = TypeRef %body = CompoundStmt }
   pattern New { "new" %type = TypeRef %body = CompoundStmt }
   pattern Number { %value = number }
   pattern Str { %value = str }
@@ -459,6 +461,13 @@ func EmitExpr(stream: Stream, ctx: ContextFinderContext, expr: Expr) -> unit {
     EmitStmt(ctx, expr->body);
     emit { "self;\n"; }
     emit { "})"; }
+  case .NewArena:
+    emit { "({\nauto* self = "; expr->arena_name.str; "->New<"; }
+    EmitType(expr->type);
+    emit { ">();\n"; }
+    EmitStmt(ctx, expr->body);
+    emit { "self;\n"; }
+    emit { "})"; }
   case .Number:
     emit { expr->value.str; }
   case .Str:
@@ -699,9 +708,9 @@ func EmitFuncDecl(stream: Stream, ctx: ContextFinderContext, decl: FuncDecl) -> 
   emit { "}\n"; }
 }
 
-func Emit(stream: Stream, m: Module) -> unit {
+func Emit(ast: ASTContext, stream: Stream, m: Module) -> unit {
   emit { "namespace "; m->mod_name.str; " {\n\n"; }
-  let ctx = new ContextFinderContext {};
+  let ctx = new[ast] ContextFinderContext {};
 
   for decl in m->decls { open decl : Decl { default:
     case .Func: 
@@ -736,7 +745,9 @@ module lower_regex_to_nfa;
 
 context let_context : NameDeclMap<RegexDecl>;
 
-func skip(a: Node, b: Node) -> unit { a->edges.push_back(new SkipToEdge { self->next = b; }); }
+context ast : ASTContext;
+
+func skip(ast: ASTContext, a: Node, b: Node) -> unit { a->edges.push_back(new[ast] SkipToEdge { self->next = b; }); }
 
 func lowerToChar(e: RegexExpr) -> char {
   open e : RegexExpr {
@@ -752,29 +763,29 @@ func lowerToChar(e: RegexExpr) -> char {
     error(e, "is not a single char");
   }
 }
-func lower(ctx: LetContext, e: RegexExpr) -> NodePair {
+func lower(ast: ASTContext, ctx: LetContext, e: RegexExpr) -> NodePair {
   open e : RegexExpr {
   case .String:
-    let n = new Node {};
-    let pair = new NodePair { self->st = n; self->ed = n; };
+    let n = new[ast] Node {};
+    let pair = new[ast] NodePair { self->st = n; self->ed = n; };
     for c in Unescaped(e->value.str) {
-      let edge = new UnaryEdge {};
+      let edge = new[ast] UnaryEdge {};
       edge->match = c;
-      edge->next = new Node {};
+      edge->next = new[ast] Node {};
       pair->ed->edges.push_back(edge);
       pair->ed = edge->next;
     }
     return pair;
   case .Integer:
-    let pair = new NodePair { self->st = new Node {}; self->ed = new Node {}; };
-    let edge = new UnaryEdge {};
+    let pair = new[ast] NodePair { self->st = new[ast] Node {}; self->ed = new[ast] Node {}; };
+    let edge = new[ast] UnaryEdge {};
     pair->st->edges.push_back(edge);
     edge->match = lowerToChar(e);
     edge->next = pair->ed;
     return pair;
   case .Range:
-    let pair = new NodePair { self->st = new Node {}; self->ed = new Node{}; };
-    let edge = new RangeEdge {};
+    let pair = new[ast] NodePair { self->st = new[ast] Node {}; self->ed = new[ast] Node{}; };
+    let edge = new[ast] RangeEdge {};
     pair->st->edges.push_back(edge);
     edge->start = lowerToChar(e->st);
     edge->end = lowerToChar(e->ed);
@@ -784,11 +795,11 @@ func lower(ctx: LetContext, e: RegexExpr) -> NodePair {
     let a = lower(ctx, e->lhs);
     let b = lower(ctx, e->rhs);
     skip(a->ed, b->st);
-    return new NodePair { self->st = a->st; self->ed = b->ed; };
+    return new[ast] NodePair { self->st = a->st; self->ed = b->ed; };
   case .Wrapped: return lower(ctx, e->value);
   case .Named: return lower(ctx, ctx->find(e->name.str));
   case .Alt:
-    let pair = new NodePair { self->st = new Node{}; self->ed = new Node{}; };
+    let pair = new[ast] NodePair { self->st = new[ast] Node{}; self->ed = new[ast] Node{}; };
     let a = lower(ctx, e->lhs);
     let b = lower(ctx, e->rhs);
     skip(pair->st, a->st);
@@ -797,7 +808,7 @@ func lower(ctx: LetContext, e: RegexExpr) -> NodePair {
     skip(b->ed, pair->ed);
     return pair;
   case .Star:
-    let pair = new NodePair { self->st = new Node{}; self->ed = new Node {}; };
+    let pair = new[ast] NodePair { self->st = new[ast] Node{}; self->ed = new[ast] Node {}; };
     let a = lower(ctx, e->base);
     skip(a->ed, a->st);
     skip(pair->st, a->st);
@@ -811,11 +822,11 @@ func lower(ctx: LetContext, e: RegexExpr) -> NodePair {
   }
 }
 
-func rewriteRegexDecl(decl: RegexDecl) -> NFAGraphDecl {
-  scope ctx = new LetContext {} {
-    return new NFAGraphDecl {
+func rewriteRegexDecl(ast: ASTContext, decl: RegexDecl) -> NFAGraphDecl {
+  scope ctx = new[ast] LetContext {} {
+    return new[ast] NFAGraphDecl {
       self->name = decl->name;
-      self->root = new Node {};
+      self->root = new[ast] Node {};
       for i in decl->items {
         open i : TokenDecl {
         case .Let: ctx->declare(i->name.str, i->value);
@@ -823,11 +834,11 @@ func rewriteRegexDecl(decl: RegexDecl) -> NFAGraphDecl {
         case .Emit:
           let nfa = lower(ctx, i->value);
           skip(self->root, nfa->st);
-          nfa->ed->edges.push_back(new EmitEdge { self->name = i->name; });
+          nfa->ed->edges.push_back(new[ast] EmitEdge { self->name = i->name; });
         case .Ignore:
           let nfa = lower(ctx, i->value);
           skip(self->root, nfa->st);
-          nfa->ed->edges.push_back(new IgnoreEdge {});
+          nfa->ed->edges.push_back(new[ast] IgnoreEdge {});
         }
       }
     };
@@ -836,8 +847,8 @@ func rewriteRegexDecl(decl: RegexDecl) -> NFAGraphDecl {
 #11
 module parser_spec;
 
-func visitSuccessors(ctx: DFAMappingContext, base: Node, states: Array<Node>) -> unit {
-  let c_ctx = new EdgeSetContext {};
+func visitSuccessors(ast: ASTContext, ctx: DFAMappingContext, base: Node, states: Array<Node>) -> unit {
+  let c_ctx = new[ast] EdgeSetContext {};
   for state in states { c_ctx->AddWork(state); }
   loop {
     if (c_ctx->work_list.empty()) { break; }
@@ -857,20 +868,20 @@ func visitSuccessors(ctx: DFAMappingContext, base: Node, states: Array<Node>) ->
   for edge in c_ctx->edges {
     let next = ctx->getNode(Canonicalize(edge.next));
     if (edge.st == edge.ed) {
-      base->edges.push_back(new UnaryEdge { self->next = next; self->match = edge.ed; });
+      base->edges.push_back(new[ast] UnaryEdge { self->next = next; self->match = edge.ed; });
     } else {
-      base->edges.push_back(new RangeEdge { self->next = next; self->start = edge.st; self->end = edge.ed; });
+      base->edges.push_back(new[ast] RangeEdge { self->next = next; self->start = edge.st; self->end = edge.ed; });
     }
   }
   if (c_ctx->emit_or_ignore) {
     base->edges.push_back(c_ctx->emit_or_ignore);
   } else {
-    base->edges.push_back(new UnexpectedEdge {});
+    base->edges.push_back(new[ast] UnexpectedEdge {});
   }
 }
 
-func toDFA(root: Node) -> Node {
-  let ctx = new DFAMappingContext {};
+func toDFA(ast: ASTContext, root: Node) -> Node {
+  let ctx = new[ast] DFAMappingContext { self->ctx = ast; };
   var states: Array<Node>;
   states.push_back(root);
   let result = ctx->getNode(states);
@@ -878,7 +889,7 @@ func toDFA(root: Node) -> Node {
     if (ctx->work_list.empty()) { break; }
     let item = ctx->work_list.back();
     ctx->work_list.pop_back();
-    visitSuccessors(ctx, item.first, item.second);
+    visitSuccessors(ast, ctx, item.first, item.second);
   }
   return result;
 }
@@ -990,12 +1001,12 @@ func emitNewType(stream: Stream, t: TypeDeclExpr) -> unit {
     if (t->name.str == "char") { error("Cannot new: ", t); return; }
     if (t->name.str == "int") { error("Cannot new: ", t); return; }
     if (t->name.str == "bool") { error("Cannot new: ", t); return; }
-    emit { "new "; t->name.str; }
+    emit { "tokens.New<"; t->name.str; ">()"; }
   case .Colon:
     let sub_t = t->base;
     open sub_t : TypeDeclExpr {
     case .Named:
-      emit {"new "; t->name.str; sub_t->name.str; }
+      emit {"tokens.New<"; t->name.str; sub_t->name.str; ">()"; }
     default:
       error("Cannot new: ", t);
     }
@@ -1297,7 +1308,7 @@ func emitBasics(stream: Stream, globals: ModuleContext, m: Module, is_header: bo
       productionName(decl);
       emit { "(Tokenizer& tokens);\n"; }
     case .Entry:
-      let entry_type = new NamedTypeDeclExpr { self->name = decl->name; };
+      let entry_type = new[globals] NamedTypeDeclExpr { self->name = decl->name; };
       emitTypeExpr(stream, entry_type);
       emit { " DoParse(Tokenizer& tokens);\n"; }
     default:
@@ -1318,7 +1329,7 @@ if (is_header) {
       emitResultIfPresent();
       emit { "}\n"; }
     case .Entry:
-      let entry_type = new NamedTypeDeclExpr { self->name = decl->name; };
+      let entry_type = new[globals] NamedTypeDeclExpr { self->name = decl->name; };
       emitTypeExpr(stream, entry_type);
       emit { " DoParse(Tokenizer& tokens) {\n"; }
       emit { "  return _production_"; decl->name.str; "(tokens);\n"; }
@@ -1357,7 +1368,7 @@ func doTypeCheckExpr(tc_ctx: TypeCheckContext, expr: PatternExpr) -> TypeDeclExp
     let globals = tc_ctx->globals;
     let tc_ctx = tc_ctx->ConcatContext();
     let element_ty = globals->CacheType(expr->element, doTypeCheck(expr->element));
-    return new ParametricTypeDeclExpr {
+    return new[tc_ctx] ParametricTypeDeclExpr {
       self->base = theArrayType;
       self->params.push_back(element_ty);
     };
@@ -1365,7 +1376,7 @@ func doTypeCheckExpr(tc_ctx: TypeCheckContext, expr: PatternExpr) -> TypeDeclExp
     let globals = tc_ctx->globals;
     let tc_ctx = tc_ctx->ConcatContext();
     let element_ty = globals->CacheType(expr->element, doTypeCheck(expr->element));
-    return new ParametricTypeDeclExpr {
+    return new[tc_ctx] ParametricTypeDeclExpr {
       self->base = theArrayType;
       self->params.push_back(element_ty);
     };
@@ -1462,15 +1473,15 @@ func findSuccessor(s: PatternStmt) -> PatternStmt {
   }
 }
 
-func makeTryStmtFromPattern(subdecl: PatternDecl, base_type: TypeDeclExpr) -> PatternStmt {
-  let subt = new ColonTypeDeclExpr {
+func makeTryStmtFromPattern(globals: ModuleContext, subdecl: PatternDecl, base_type: TypeDeclExpr) -> PatternStmt {
+  let subt = new[globals] ColonTypeDeclExpr {
     self->base = base_type;
     self->name = subdecl->name;
   };
-  return new ConditionalPatternStmt {
-    self->value = new CompoundPatternStmt {
-      self->items.push_back(new WrapPatternStmt {
-        self->value = new NewPatternExpr {
+  return new[globals] ConditionalPatternStmt {
+    self->value = new[globals] CompoundPatternStmt {
+      self->items.push_back(new[globals] WrapPatternStmt {
+        self->value = new[globals] NewPatternExpr {
           self->type = subt;
           self->value = subdecl->value;
         };
@@ -1482,41 +1493,41 @@ func makeTryStmtFromPattern(subdecl: PatternDecl, base_type: TypeDeclExpr) -> Pa
 func lowerProductionToMergeDecl(m: Module, globals: ModuleContext, d: Decl) -> Decl {
   open d: Decl {
   case .Define:
-    return new DefineWithTypeDecl {
+    return new[globals] DefineWithTypeDecl {
       self->name = d->name;
-      let type = new NamedTypeDeclExpr { self->name = d->name; };
+      let type = new[globals] NamedTypeDeclExpr { self->name = d->name; };
       self->type = type;
-      self->value = new WrapPatternStmt {
-        self->value = new NewPatternExpr {
+      self->value = new[globals] WrapPatternStmt {
+        self->value = new[globals] NewPatternExpr {
           self->type = type;
           self->value = d->value;
         };
       };
     };
   case .Expr:
-    let base_type = new NamedTypeDeclExpr { self->name = d->name; };
+    let base_type = new[globals] NamedTypeDeclExpr { self->name = d->name; };
     let last_group_name = DoExprAnalysis(m, globals, d, base_type);
-    return new DefineWithTypeDecl {
+    return new[globals] DefineWithTypeDecl {
       self->name = d->name;
       self->type = base_type;
-      self->value = new CompoundPatternStmt {
-        self->items.push_back(new WrapPatternStmt {
-          self->value = new NamedPatternExpr {
+      self->value = new[globals] CompoundPatternStmt {
+        self->items.push_back(new[globals] WrapPatternStmt {
+          self->value = new[globals] NamedPatternExpr {
             self->name = last_group_name;
           };
         });
       };
     };
   case .Production:
-    return new DefineWithTypeDecl {
+    return new[globals] DefineWithTypeDecl {
       self->name = d->name;
-      let base_type = new NamedTypeDeclExpr { self->name = d->name; };
+      let base_type = new[globals] NamedTypeDeclExpr { self->name = d->name; };
       self->type = base_type;
-      self->value = RotateAndVerifyTrys(globals, new CompoundPatternStmt {
+      self->value = RotateAndVerifyTrys(globals, new[globals] CompoundPatternStmt {
         for subdecl in d->stmts {
           open subdecl: Decl {
           case .Pattern:
-            self->items.push_back(makeTryStmtFromPattern(subdecl, base_type));
+            self->items.push_back(makeTryStmtFromPattern(globals, subdecl, base_type));
           default:
             error("Only patterns allowed in exprs...");
           }
@@ -1524,15 +1535,15 @@ func lowerProductionToMergeDecl(m: Module, globals: ModuleContext, d: Decl) -> D
       });
     };
   case .ProductionAndType:
-    return new DefineWithTypeDecl {
+    return new[globals] DefineWithTypeDecl {
       self->name = d->name;
       let base_type = d->type;
       self->type = base_type;
-      self->value = RotateAndVerifyTrys(globals, new CompoundPatternStmt {
+      self->value = RotateAndVerifyTrys(globals, new[globals] CompoundPatternStmt {
         for subdecl in d->stmts {
           open subdecl: Decl {
           case .Pattern:
-            self->items.push_back(makeTryStmtFromPattern(subdecl, base_type));
+            self->items.push_back(makeTryStmtFromPattern(globals, subdecl, base_type));
           default:
             error("Only patterns allowed in exprs...");
           }
@@ -1540,7 +1551,7 @@ func lowerProductionToMergeDecl(m: Module, globals: ModuleContext, d: Decl) -> D
       });
     };
   case .Pattern:
-    return new DefineWithTypeDecl {
+    return new[globals] DefineWithTypeDecl {
       self->name = d->name;
       self->type = nullptr;
       self->value = d->value;
@@ -1555,7 +1566,7 @@ func lowerProductionToMergeDecl(m: Module, globals: ModuleContext, d: Decl) -> D
 }
 
 func lowerProductionToMerge(globals: ModuleContext, m: Module) -> Module {
-  return new Module {
+  return new[globals] Module {
     self->mod_name = m->mod_name;
     for decl in m->decls { self->decls.push_back(lowerProductionToMergeDecl(self, globals, decl)); }
   };

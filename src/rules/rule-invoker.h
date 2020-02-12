@@ -122,6 +122,7 @@ struct FileContext {
     }
     GetLibRule(rule);
   }
+  ASTContext& ast_ctx() const;
 };
 
 struct VirtualFileCollection {
@@ -134,13 +135,14 @@ struct VirtualFileCollection {
 };
 
 struct GlobalContext {
+  ASTContext ctx;
   std::unordered_map<std::string, FileContext> cache;
   std::unordered_map<std::string, VirtualFileCollection> buffer_cache;
 
-  LibraryBuildResult* default_flags = MakeDefaultFlags();
-  LibraryBuildResult* so_flags = MakeSoFlags();
-  LibraryBuildResult* gtk_flags = MakeGtkFlags();
-  LibraryBuildResult* dl_flags = MakeDLFlags();
+  LibraryBuildResult* default_flags = MakeDefaultFlags(ctx);
+  LibraryBuildResult* so_flags = MakeSoFlags(ctx);
+  LibraryBuildResult* gtk_flags = MakeGtkFlags(ctx);
+  LibraryBuildResult* dl_flags = MakeDLFlags(ctx);
 
   LibraryBuildResult* GetRule(string_view base, string_view rule) { 
     return GetFile(base)->GetLibRule(rule);

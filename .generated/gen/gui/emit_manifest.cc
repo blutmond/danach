@@ -1,4 +1,5 @@
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace emit_manifest {
 namespace tok {
@@ -255,7 +256,7 @@ bb1:
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -303,7 +304,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -380,7 +384,7 @@ Module* DoParse(Tokenizer& tokens) {
 }
 ChunkSrc* _production_ChunkSrc(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new ChunkSrc;__current_self->id = tokens.expect(tok::number);
+auto __current_self = tokens.New<ChunkSrc>();__current_self->id = tokens.expect(tok::number);
 __current_self;
 });
 return result;
@@ -389,7 +393,7 @@ Action* _production_Action(Tokenizer& tokens) {
 if (tokens.peak_check_str("pragma_once")) {
 tokens.expect("pragma_once");
 auto result = ({
-auto __current_self = new PragmaOnceAction;tokens.expect(";");
+auto __current_self = tokens.New<PragmaOnceAction>();tokens.expect(";");
 __current_self;
 });
 return result;
@@ -397,7 +401,7 @@ return result;
 if (tokens.peak_check_str("import")) {
 tokens.expect("import");
 auto result = ({
-auto __current_self = new ImportAction;__current_self->filename = tokens.expect(tok::str);
+auto __current_self = tokens.New<ImportAction>();__current_self->filename = tokens.expect(tok::str);
 tokens.expect(";");
 __current_self;
 });
@@ -406,7 +410,7 @@ return result;
 if (tokens.peak_check_str("hdr_chunk")) {
 tokens.expect("hdr_chunk");
 auto result = ({
-auto __current_self = new HdrChunkAction;__current_self->id = _production_ChunkSrc(tokens);
+auto __current_self = tokens.New<HdrChunkAction>();__current_self->id = _production_ChunkSrc(tokens);
 tokens.expect(";");
 __current_self;
 });
@@ -415,7 +419,7 @@ return result;
 if (tokens.peak_check_str("fwd_declare_func")) {
 tokens.expect("fwd_declare_func");
 auto result = ({
-auto __current_self = new FwdDeclareFuncAction;__current_self->id = _production_ChunkSrc(tokens);
+auto __current_self = tokens.New<FwdDeclareFuncAction>();__current_self->id = _production_ChunkSrc(tokens);
 tokens.expect(";");
 __current_self;
 });
@@ -424,7 +428,7 @@ return result;
 if (tokens.peak_check_str("define_func")) {
 tokens.expect("define_func");
 auto result = ({
-auto __current_self = new DefineFuncAction;__current_self->sig_id = _production_ChunkSrc(tokens);
+auto __current_self = tokens.New<DefineFuncAction>();__current_self->sig_id = _production_ChunkSrc(tokens);
 tokens.expect(",");
 __current_self->body_id = _production_ChunkSrc(tokens);
 tokens.expect(";");
@@ -436,7 +440,7 @@ tokens.unexpected();
 }
 EmitFileDecl* _production_EmitFileDecl(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new EmitFileDecl;tokens.expect("emit_file");
+auto __current_self = tokens.New<EmitFileDecl>();tokens.expect("emit_file");
 __current_self->filename = tokens.expect(tok::str);
 tokens.expect("{");
 __current_self->actions = ([&]{
@@ -456,7 +460,7 @@ return result;
 }
 Module* _production_Module(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Module;__current_self->decls = ([&]{
+auto __current_self = tokens.New<Module>();__current_self->decls = ([&]{
 std::vector<EmitFileDecl*> __current_vector__;
     while (true) {
    if (tokens.peak_check(tok::eof)) { break; }

@@ -1,4 +1,5 @@
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace view_manifest {
 namespace tok {
@@ -255,7 +256,7 @@ bb1:
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -303,7 +304,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -363,7 +367,7 @@ Module* DoParse(Tokenizer& tokens) {
 }
 ChunkSrc* _production_ChunkSrc(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new ChunkSrc;__current_self->id = tokens.expect(tok::number);
+auto __current_self = tokens.New<ChunkSrc>();__current_self->id = tokens.expect(tok::number);
 __current_self;
 });
 return result;
@@ -372,7 +376,7 @@ Action* _production_Action(Tokenizer& tokens) {
 if (tokens.peak_check_str("raw")) {
 tokens.expect("raw");
 auto result = ({
-auto __current_self = new RawAction;__current_self->id = _production_ChunkSrc(tokens);
+auto __current_self = tokens.New<RawAction>();__current_self->id = _production_ChunkSrc(tokens);
 tokens.expect(";");
 __current_self;
 });
@@ -381,7 +385,7 @@ return result;
 if (tokens.peak_check_str("func")) {
 tokens.expect("func");
 auto result = ({
-auto __current_self = new DefineFuncAction;__current_self->sig_id = _production_ChunkSrc(tokens);
+auto __current_self = tokens.New<DefineFuncAction>();__current_self->sig_id = _production_ChunkSrc(tokens);
 tokens.expect(",");
 __current_self->body_id = _production_ChunkSrc(tokens);
 tokens.expect(";");
@@ -393,7 +397,7 @@ tokens.unexpected();
 }
 EmitFileDecl* _production_EmitFileDecl(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new EmitFileDecl;tokens.expect("view");
+auto __current_self = tokens.New<EmitFileDecl>();tokens.expect("view");
 __current_self->name = tokens.expect(tok::str);
 tokens.expect("{");
 __current_self->actions = ([&]{
@@ -413,7 +417,7 @@ return result;
 }
 Module* _production_Module(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Module;__current_self->decls = ([&]{
+auto __current_self = tokens.New<Module>();__current_self->decls = ([&]{
 std::vector<EmitFileDecl*> __current_vector__;
     while (true) {
    if (tokens.peak_check(tok::eof)) { break; }

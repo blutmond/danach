@@ -1,4 +1,5 @@
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace production_spec {
 namespace tok {
@@ -237,7 +238,7 @@ bb1:
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -285,7 +286,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -562,12 +566,12 @@ TypeDeclExpr* _production_TypeDeclExpr_group_0(Tokenizer& tokens) {
 if (tokens.peak_check_str("(")) {
 tokens.expect("(");
 auto result = ({
-auto __current_self = new ProductTypeDeclExpr;__current_self->decls = ([&]{
+auto __current_self = tokens.New<ProductTypeDeclExpr>();__current_self->decls = ([&]{
 std::vector<TypeLetDecl*> __current_vector__;
    if (!tokens.peak_check_str(")")) {
     while (true) {
  __current_vector__.push_back([&]{auto result = ({
-auto __current_self = new TypeLetDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<TypeLetDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect(":");
 __current_self->type = _production_TypeDeclExpr(tokens);
 __current_self;
@@ -587,12 +591,12 @@ return result;
 if (tokens.peak_check_str("{")) {
 tokens.expect("{");
 auto result = ({
-auto __current_self = new SumTypeDeclExpr;__current_self->decls = ([&]{
+auto __current_self = tokens.New<SumTypeDeclExpr>();__current_self->decls = ([&]{
 std::vector<TypeLetDecl*> __current_vector__;
     while (true) {
    if (tokens.peak_check_str("}")) { break; }
  __current_vector__.push_back([&]{auto result = ({
-auto __current_self = new TypeLetDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<TypeLetDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->type = _production_TypeDeclExpr(tokens);
 tokens.expect(";");
@@ -611,7 +615,7 @@ return result;
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
-auto __current_self = new NamedTypeDeclExpr;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<NamedTypeDeclExpr>();__current_self->name = _tmp_0;
 __current_self;
 });
 return result;
@@ -624,7 +628,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str("::")) {
 tokens.expect("::");
 auto result = ({
-auto __current_self = new ColonTypeDeclExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<ColonTypeDeclExpr>();__current_self->base = _tmp_0;
 __current_self->name = tokens.expect(tok::identifier);
 __current_self;
 });
@@ -634,7 +638,7 @@ continue;
 if (tokens.peak_check_str("<")) {
 tokens.expect("<");
 auto result = ({
-auto __current_self = new ParametricTypeDeclExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<ParametricTypeDeclExpr>();__current_self->base = _tmp_0;
 __current_self->params = ([&]{
 std::vector<TypeDeclExpr*> __current_vector__;
     while (true) {
@@ -663,7 +667,7 @@ PatternExpr* _production_PatternExpr(Tokenizer& tokens) {
 if (tokens.peak_check_str("comma_array")) {
 tokens.expect("comma_array");
 auto result = ({
-auto __current_self = new CommaConcatPatternExpr;tokens.expect("(");
+auto __current_self = tokens.New<CommaConcatPatternExpr>();tokens.expect("(");
 __current_self->comma = tokens.expect(tok::identifier);
 tokens.expect(")");
 __current_self->element = _production_CompoundPatternStmt(tokens);
@@ -674,7 +678,7 @@ return result;
 if (tokens.peak_check_str("concat")) {
 tokens.expect("concat");
 auto result = ({
-auto __current_self = new ConcatPatternExpr;__current_self->element = _production_CompoundPatternStmt(tokens);
+auto __current_self = tokens.New<ConcatPatternExpr>();__current_self->element = _production_CompoundPatternStmt(tokens);
 __current_self;
 });
 return result;
@@ -682,14 +686,14 @@ return result;
 if (tokens.peak_check_str("_")) {
 tokens.expect("_");
 auto result = ({
-auto __current_self = new SelfPatternExpr;__current_self;
+auto __current_self = tokens.New<SelfPatternExpr>();__current_self;
 });
 return result;
 }
 if (tokens.peak_check_str("new")) {
 tokens.expect("new");
 auto result = ({
-auto __current_self = new NewPatternExpr;__current_self->type = _production_TypeDeclExpr(tokens);
+auto __current_self = tokens.New<NewPatternExpr>();__current_self->type = _production_TypeDeclExpr(tokens);
 __current_self->value = _production_CompoundPatternStmt(tokens);
 __current_self;
 });
@@ -698,14 +702,14 @@ return result;
 if (tokens.peak_check_str("pop")) {
 tokens.expect("pop");
 auto result = ({
-auto __current_self = new PopPatternExpr;__current_self;
+auto __current_self = tokens.New<PopPatternExpr>();__current_self;
 });
 return result;
 }
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
-auto __current_self = new NamedPatternExpr;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<NamedPatternExpr>();__current_self->name = _tmp_0;
 __current_self;
 });
 return result;
@@ -716,7 +720,7 @@ PatternStmt* _production_CompoundPatternStmt(Tokenizer& tokens) {
 if (tokens.peak_check_str("{")) {
 tokens.expect("{");
 auto result = ({
-auto __current_self = new CompoundPatternStmt;__current_self->items = ([&]{
+auto __current_self = tokens.New<CompoundPatternStmt>();__current_self->items = ([&]{
 std::vector<PatternStmt*> __current_vector__;
     while (true) {
    if (tokens.peak_check_str("}")) { break; }
@@ -737,7 +741,7 @@ PatternStmt* _production_PatternStmt(Tokenizer& tokens) {
 if (tokens.peak_check(tok::str)) {
 auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
-auto __current_self = new StringPatternStmt;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<StringPatternStmt>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -745,7 +749,7 @@ return result;
 if (tokens.peak_check_str("%")) {
 tokens.expect("%");
 auto result = ({
-auto __current_self = new AssignPatternStmt;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<AssignPatternStmt>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->value = _production_PatternExpr(tokens);
 __current_self;
@@ -755,7 +759,7 @@ return result;
 if (tokens.peak_check_str("push")) {
 tokens.expect("push");
 auto result = ({
-auto __current_self = new PushPatternStmt;__current_self->value = _production_PatternExpr(tokens);
+auto __current_self = tokens.New<PushPatternStmt>();__current_self->value = _production_PatternExpr(tokens);
 __current_self;
 });
 return result;
@@ -763,7 +767,7 @@ return result;
 if (tokens.peak_check_str("merge")) {
 tokens.expect("merge");
 auto result = ({
-auto __current_self = new MergePatternStmt;tokens.expect("(");
+auto __current_self = tokens.New<MergePatternStmt>();tokens.expect("(");
 __current_self->items = ([&]{
 std::vector<PatternStmt*> __current_vector__;
    if (!tokens.peak_check_str(")")) {
@@ -784,7 +788,7 @@ return result;
 if (tokens.peak_check_str("expr_tail_loop")) {
 tokens.expect("expr_tail_loop");
 auto result = ({
-auto __current_self = new ExprTailLoopPatternStmt;tokens.expect("(");
+auto __current_self = tokens.New<ExprTailLoopPatternStmt>();tokens.expect("(");
 __current_self->base = _production_PatternExpr(tokens);
 tokens.expect(")");
 tokens.expect(":");
@@ -797,14 +801,14 @@ return result;
 if (tokens.peak_check_str("try")) {
 tokens.expect("try");
 auto result = ({
-auto __current_self = new ConditionalPatternStmt;__current_self->value = _production_CompoundPatternStmt(tokens);
+auto __current_self = tokens.New<ConditionalPatternStmt>();__current_self->value = _production_CompoundPatternStmt(tokens);
 __current_self;
 });
 return result;
 }
 auto _tmp_0 = _production_PatternExpr(tokens);
 auto result = ({
-auto __current_self = new WrapPatternStmt;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<WrapPatternStmt>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -828,7 +832,7 @@ Decl* _production_Decl(Tokenizer& tokens) {
 if (tokens.peak_check_str("type")) {
 tokens.expect("type");
 auto result = ({
-auto __current_self = new TypeDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<TypeDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->type = _production_TypeDeclExpr(tokens);
 tokens.expect(";");
@@ -839,7 +843,7 @@ return result;
 if (tokens.peak_check_str("expr")) {
 tokens.expect("expr");
 auto result = ({
-auto __current_self = new ExprDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<ExprDecl>();__current_self->name = tokens.expect(tok::identifier);
 __current_self->stmts = _production_DeclList(tokens);
 __current_self;
 });
@@ -851,7 +855,7 @@ auto _tmp_0 = tokens.expect(tok::identifier);
 if (tokens.peak_check_str(":")) {
 tokens.expect(":");
 auto result = ({
-auto __current_self = new ProductionAndTypeDecl;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<ProductionAndTypeDecl>();__current_self->name = _tmp_0;
 __current_self->type = _production_TypeDeclExpr(tokens);
 __current_self->stmts = _production_DeclList(tokens);
 __current_self;
@@ -860,7 +864,7 @@ return result;
 }
 auto _tmp_1 = _production_DeclList(tokens);
 auto result = ({
-auto __current_self = new ProductionDecl;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<ProductionDecl>();__current_self->name = _tmp_0;
 __current_self->stmts = _tmp_1;
 __current_self;
 });
@@ -869,7 +873,7 @@ return result;
 if (tokens.peak_check_str("pattern")) {
 tokens.expect("pattern");
 auto result = ({
-auto __current_self = new PatternDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<PatternDecl>();__current_self->name = tokens.expect(tok::identifier);
 __current_self->value = _production_CompoundPatternStmt(tokens);
 __current_self;
 });
@@ -878,7 +882,7 @@ return result;
 if (tokens.peak_check_str("left")) {
 tokens.expect("left");
 auto result = ({
-auto __current_self = new LeftAssocDecl;__current_self->stmts = _production_DeclList(tokens);
+auto __current_self = tokens.New<LeftAssocDecl>();__current_self->stmts = _production_DeclList(tokens);
 __current_self;
 });
 return result;
@@ -886,7 +890,7 @@ return result;
 if (tokens.peak_check_str("right")) {
 tokens.expect("right");
 auto result = ({
-auto __current_self = new RightAssocDecl;__current_self->stmts = _production_DeclList(tokens);
+auto __current_self = tokens.New<RightAssocDecl>();__current_self->stmts = _production_DeclList(tokens);
 __current_self;
 });
 return result;
@@ -897,7 +901,7 @@ auto _tmp_0 = tokens.expect(tok::identifier);
 if (tokens.peak_check_str(":")) {
 tokens.expect(":");
 auto result = ({
-auto __current_self = new DefineWithTypeDecl;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<DefineWithTypeDecl>();__current_self->name = _tmp_0;
 __current_self->type = _production_TypeDeclExpr(tokens);
 __current_self->value = _production_CompoundPatternStmt(tokens);
 __current_self;
@@ -906,7 +910,7 @@ return result;
 }
 auto _tmp_1 = _production_CompoundPatternStmt(tokens);
 auto result = ({
-auto __current_self = new DefineDecl;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<DefineDecl>();__current_self->name = _tmp_0;
 __current_self->value = _tmp_1;
 __current_self;
 });
@@ -915,7 +919,7 @@ return result;
 if (tokens.peak_check_str("entry")) {
 tokens.expect("entry");
 auto result = ({
-auto __current_self = new EntryDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<EntryDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect(";");
 __current_self;
 });
@@ -924,7 +928,7 @@ return result;
 if (tokens.peak_check_str("tokenizer")) {
 tokens.expect("tokenizer");
 auto result = ({
-auto __current_self = new TokenizerDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<TokenizerDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect(";");
 __current_self;
 });
@@ -934,7 +938,7 @@ tokens.unexpected();
 }
 Module* _production_Module(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Module;tokens.expect("module");
+auto __current_self = tokens.New<Module>();tokens.expect("module");
 __current_self->mod_name = tokens.expect(tok::identifier);
 tokens.expect(";");
 __current_self->decls = ([&]{

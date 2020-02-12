@@ -1,5 +1,4 @@
 #include <string.h>
-char* _strdup(const char* str) { return strdup(str); }
 
 #include "rules/compiler.h"
 #include "rules/process.h"
@@ -49,14 +48,6 @@ static MkdirCache mkdir;
 
 void DoMkdir(const char* filename) {
   mkdir.Ensure(filename);
-}
-
-const char* strdup(const std::string& str) {
-  return _strdup(str.c_str());
-}
-
-const char* strdup(string_view str) {
-  return strdup(std::string(str).c_str());
 }
 
 string_view RemoveExt(string_view filename) {
@@ -119,21 +110,24 @@ void CollectCXXFlags(const std::vector<LibraryBuildResult*>& deps, std::vector<c
   }
 }
 
-LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>& deps,
+bool use_asan = false;
+LibraryBuildResult *SimpleCompileCXXFile(ASTContext& ast_ctx, const std::vector<LibraryBuildResult*>& deps,
                                          string_view src_folder, string_view o_folder, 
                                          const std::vector<string_view>& srcs) {
-  auto* res = new LibraryBuildResult;
+  auto* res = ast_ctx.New<LibraryBuildResult>();
   for (string_view cxx_name : srcs) {
     std::vector<const char*> eval = {"/usr/bin/ccache", "/usr/bin/clang-6.0", "-Wall", "-std=c++17"};
+    if (use_asan)
+      for (const char* flag : {"-fsanitize=address", "-fno-omit-frame-pointer", "-g3"}) eval.push_back(flag);
     CollectCXXFlags(postorder(deps), &eval);
     std::string base = std::string(RemoveExt(cxx_name));
-    DoMkdir(strdup(o_folder));
-    const char* object_filename = strdup((std::string(o_folder) + "/" + base + ".o"));
+    DoMkdir(ast_ctx.strdup(o_folder));
+    const char* object_filename = ast_ctx.strdup((std::string(o_folder) + "/" + base + ".o"));
     eval.push_back("-MF");
-    eval.push_back(strdup((std::string(o_folder) + "/" + base + ".d")));
+    eval.push_back(ast_ctx.strdup((std::string(o_folder) + "/" + base + ".d")));
     eval.push_back("-MD");
     eval.push_back("-c");
-    eval.push_back(strdup(std::string(src_folder) + "/" + std::string(cxx_name)));
+    eval.push_back(ast_ctx.strdup(std::string(src_folder) + "/" + std::string(cxx_name)));
     eval.push_back("-o");
     eval.push_back(object_filename);
     RunTrace(std::move(eval));
@@ -145,6 +139,8 @@ LibraryBuildResult *SimpleCompileCXXFile(const std::vector<LibraryBuildResult*>&
 
 void BuildLinkCommand(LinkCommand* cmd) {
   std::vector<const char*> eval = {"/usr/bin/clang-6.0", "-Wall"};
+  if (use_asan)
+    for (const char* flag : {"-fsanitize=address", "-fno-omit-frame-pointer", "-g3"}) eval.push_back(flag);
   auto toposort_deps = toposort(cmd->deps);
   CollectObjects(toposort_deps, &eval);
   CollectLinkFlags(toposort_deps, &eval);
@@ -153,22 +149,22 @@ void BuildLinkCommand(LinkCommand* cmd) {
   RunTrace(eval);
 }
 
-LibraryBuildResult *MakeDefaultFlags() {
-  auto* res = new LibraryBuildResult;
+LibraryBuildResult *MakeDefaultFlags(ASTContext& ast_ctx) {
+  auto* res = ast_ctx.New<LibraryBuildResult>();
   res->link_flags = {"-lstdc++"};
   res->cxx_flags = {"-fpic", "-I", ".generated/", "-I", "src", "-I", ".build/"};
   return res;
 }
 
-LibraryBuildResult *MakeSoFlags() {
-  auto* res = new LibraryBuildResult;
+LibraryBuildResult *MakeSoFlags(ASTContext& ast_ctx) {
+  auto* res = ast_ctx.New<LibraryBuildResult>();
   res->link_flags = {"-shared", "-Wl,-z,defs", "-Wl,-rpath='$ORIGIN'"};
   res->cxx_flags = {};
   return res;
 }
 
-LibraryBuildResult *MakeGtkFlags() {
-  auto* res = new LibraryBuildResult;
+LibraryBuildResult *MakeGtkFlags(ASTContext& ast_ctx) {
+  auto* res = ast_ctx.New<LibraryBuildResult>();
   res->link_flags = {"-lgtk-3", "-lgdk-3", "-lpangocairo-1.0", "-lpango-1.0",
     "-latk-1.0", "-lcairo-gobject", "-lcairo",
       "-lfontconfig",
@@ -185,8 +181,8 @@ LibraryBuildResult *MakeGtkFlags() {
   return res;
 }
 
-LibraryBuildResult *MakeDLFlags() {
-  auto* res = new LibraryBuildResult;
+LibraryBuildResult *MakeDLFlags(ASTContext& ast_ctx) {
+  auto* res = ast_ctx.New<LibraryBuildResult>();
   res->link_flags = {"-ldl"};
   return res;
 }

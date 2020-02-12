@@ -3,7 +3,7 @@ namespace production_spec {
 PatternExpr* getValue(PatternStmt* s);
 PatternStmt* findSuccessorForExpr(PatternExpr* expr, PatternStmt* stmt);
 PatternStmt* findSuccessor(PatternStmt* s);
-PatternStmt* makeTryStmtFromPattern(PatternDecl* subdecl, TypeDeclExpr* base_type);
+PatternStmt* makeTryStmtFromPattern(ModuleContext* globals, PatternDecl* subdecl, TypeDeclExpr* base_type);
 Decl* lowerProductionToMergeDecl(Module* m, ModuleContext* globals, Decl* d);
 Module* lowerProductionToMerge(ModuleContext* globals, Module* m);
 
@@ -123,22 +123,22 @@ return findSuccessorForExpr(s->value, s);
 }
 }
 }
-PatternStmt* makeTryStmtFromPattern(PatternDecl* subdecl, TypeDeclExpr* base_type) {
+PatternStmt* makeTryStmtFromPattern(ModuleContext* globals, PatternDecl* subdecl, TypeDeclExpr* base_type) {
 auto __tmp__subt = ({
-auto* self = new ColonTypeDeclExpr;
+auto* self = globals->New<ColonTypeDeclExpr>();
 self->base = base_type;
 self->name = subdecl->name;
 self;
 });
 auto subt = std::move(__tmp__subt);
 return ({
-auto* self = new ConditionalPatternStmt;
+auto* self = globals->New<ConditionalPatternStmt>();
 self->value = ({
-auto* self = new CompoundPatternStmt;
+auto* self = globals->New<CompoundPatternStmt>();
 self->items.push_back(({
-auto* self = new WrapPatternStmt;
+auto* self = globals->New<WrapPatternStmt>();
 self->value = ({
-auto* self = new NewPatternExpr;
+auto* self = globals->New<NewPatternExpr>();
 self->type = subt;
 self->value = subdecl->value;
 self;
@@ -158,19 +158,19 @@ case Decl::Kind::Define: {
 auto* d = reinterpret_cast<DefineDecl*>(__tmp_switch_name);
 (void)d;
 return ({
-auto* self = new DefineWithTypeDecl;
+auto* self = globals->New<DefineWithTypeDecl>();
 self->name = d->name;
 auto __tmp__type = ({
-auto* self = new NamedTypeDeclExpr;
+auto* self = globals->New<NamedTypeDeclExpr>();
 self->name = d->name;
 self;
 });
 auto type = std::move(__tmp__type);
 self->type = type;
 self->value = ({
-auto* self = new WrapPatternStmt;
+auto* self = globals->New<WrapPatternStmt>();
 self->value = ({
-auto* self = new NewPatternExpr;
+auto* self = globals->New<NewPatternExpr>();
 self->type = type;
 self->value = d->value;
 self;
@@ -184,7 +184,7 @@ break;
 auto* d = reinterpret_cast<ExprDecl*>(__tmp_switch_name);
 (void)d;
 auto __tmp__base_type = ({
-auto* self = new NamedTypeDeclExpr;
+auto* self = globals->New<NamedTypeDeclExpr>();
 self->name = d->name;
 self;
 });
@@ -192,15 +192,15 @@ auto base_type = std::move(__tmp__base_type);
 auto __tmp__last_group_name = DoExprAnalysis(m, globals, d, base_type);
 auto last_group_name = std::move(__tmp__last_group_name);
 return ({
-auto* self = new DefineWithTypeDecl;
+auto* self = globals->New<DefineWithTypeDecl>();
 self->name = d->name;
 self->type = base_type;
 self->value = ({
-auto* self = new CompoundPatternStmt;
+auto* self = globals->New<CompoundPatternStmt>();
 self->items.push_back(({
-auto* self = new WrapPatternStmt;
+auto* self = globals->New<WrapPatternStmt>();
 self->value = ({
-auto* self = new NamedPatternExpr;
+auto* self = globals->New<NamedPatternExpr>();
 self->name = last_group_name;
 self;
 });
@@ -215,17 +215,17 @@ break;
 auto* d = reinterpret_cast<ProductionDecl*>(__tmp_switch_name);
 (void)d;
 return ({
-auto* self = new DefineWithTypeDecl;
+auto* self = globals->New<DefineWithTypeDecl>();
 self->name = d->name;
 auto __tmp__base_type = ({
-auto* self = new NamedTypeDeclExpr;
+auto* self = globals->New<NamedTypeDeclExpr>();
 self->name = d->name;
 self;
 });
 auto base_type = std::move(__tmp__base_type);
 self->type = base_type;
 self->value = RotateAndVerifyTrys(globals, ({
-auto* self = new CompoundPatternStmt;
+auto* self = globals->New<CompoundPatternStmt>();
 for (auto subdecl : d->stmts) {
 {
 auto __tmp_switch_name = subdecl;
@@ -233,7 +233,7 @@ switch (subdecl->getKind()) {
 case Decl::Kind::Pattern: {
 auto* subdecl = reinterpret_cast<PatternDecl*>(__tmp_switch_name);
 (void)subdecl;
-self->items.push_back(makeTryStmtFromPattern(subdecl, base_type));
+self->items.push_back(makeTryStmtFromPattern(globals, subdecl, base_type));
 break;
 } default: {
 ({
@@ -254,13 +254,13 @@ break;
 auto* d = reinterpret_cast<ProductionAndTypeDecl*>(__tmp_switch_name);
 (void)d;
 return ({
-auto* self = new DefineWithTypeDecl;
+auto* self = globals->New<DefineWithTypeDecl>();
 self->name = d->name;
 auto __tmp__base_type = d->type;
 auto base_type = std::move(__tmp__base_type);
 self->type = base_type;
 self->value = RotateAndVerifyTrys(globals, ({
-auto* self = new CompoundPatternStmt;
+auto* self = globals->New<CompoundPatternStmt>();
 for (auto subdecl : d->stmts) {
 {
 auto __tmp_switch_name = subdecl;
@@ -268,7 +268,7 @@ switch (subdecl->getKind()) {
 case Decl::Kind::Pattern: {
 auto* subdecl = reinterpret_cast<PatternDecl*>(__tmp_switch_name);
 (void)subdecl;
-self->items.push_back(makeTryStmtFromPattern(subdecl, base_type));
+self->items.push_back(makeTryStmtFromPattern(globals, subdecl, base_type));
 break;
 } default: {
 ({
@@ -289,7 +289,7 @@ break;
 auto* d = reinterpret_cast<PatternDecl*>(__tmp_switch_name);
 (void)d;
 return ({
-auto* self = new DefineWithTypeDecl;
+auto* self = globals->New<DefineWithTypeDecl>();
 self->name = d->name;
 self->type = nullptr;
 self->value = d->value;
@@ -328,7 +328,7 @@ exit(-1);
 }
 Module* lowerProductionToMerge(ModuleContext* globals, Module* m) {
 return ({
-auto* self = new Module;
+auto* self = globals->New<Module>();
 self->mod_name = m->mod_name;
 for (auto decl : m->decls) {
 self->decls.push_back(lowerProductionToMergeDecl(self, globals, decl));

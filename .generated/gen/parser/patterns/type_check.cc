@@ -53,7 +53,7 @@ auto tc_ctx = std::move(__tmp__tc_ctx);
 auto __tmp__element_ty = globals->CacheType(expr->element, doTypeCheck(tc_ctx, expr->element));
 auto element_ty = std::move(__tmp__element_ty);
 return ({
-auto* self = new ParametricTypeDeclExpr;
+auto* self = tc_ctx->New<ParametricTypeDeclExpr>();
 self->base = theArrayType;
 self->params.push_back(element_ty);
 self;
@@ -69,7 +69,7 @@ auto tc_ctx = std::move(__tmp__tc_ctx);
 auto __tmp__element_ty = globals->CacheType(expr->element, doTypeCheck(tc_ctx, expr->element));
 auto element_ty = std::move(__tmp__element_ty);
 return ({
-auto* self = new ParametricTypeDeclExpr;
+auto* self = tc_ctx->New<ParametricTypeDeclExpr>();
 self->base = theArrayType;
 self->params.push_back(element_ty);
 self;

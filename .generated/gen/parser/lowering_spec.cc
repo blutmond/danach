@@ -1,4 +1,5 @@
 #include "parser/parser-support.h"
+#include "parser/ast-context.h"
 
 namespace lowering_spec {
 namespace tok {
@@ -267,7 +268,7 @@ bb1:
 } // namespace tok
 
 struct Tokenizer {
-  explicit Tokenizer(const char* cursor_inp) : cursor(cursor_inp) {
+  explicit Tokenizer(ASTContext& ctx, const char* cursor_inp) : ctx_(ctx), cursor(cursor_inp) {
     start = cursor;
     current = tok::GetNext(cursor);
   }
@@ -315,7 +316,10 @@ struct Tokenizer {
     exit(-1);
   }
 
+  template <typename T>
+  T* New() { return ctx_.New<T>(); }
  private:
+  ASTContext& ctx_;
   const char* start;
   const char* cursor;
   tok::Token current;
@@ -345,6 +349,7 @@ struct Decl;
 struct ContextDecl;
 struct FuncDecl;
 struct Expr;
+struct NewArenaExpr;
 struct NewExpr;
 struct NumberExpr;
 struct StrExpr;
@@ -499,12 +504,19 @@ struct FuncDecl: public Decl {
 
 struct Expr {
   enum class Kind {
-    New, Number, Str, Named, Dot, Arrow, Index, ColonColon, Call, CompEqEq, Assign,
+    NewArena, New, Number, Str, Named, Dot, Arrow, Index, ColonColon, Call, CompEqEq, Assign,
   };
   Expr(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
  private:
   Kind kind_;
+};
+
+struct NewArenaExpr: public Expr {
+  NewArenaExpr() : Expr(Kind::NewArena) {}
+  tok::Token arena_name;
+  TypeRef* type;
+  Stmt* body;
 };
 
 struct NewExpr: public Expr {
@@ -634,14 +646,14 @@ TypeRef* _production_TypeRef_group_0(Tokenizer& tokens) {
 if (tokens.peak_check_str("unit")) {
 tokens.expect("unit");
 auto result = ({
-auto __current_self = new VoidTypeRef;__current_self;
+auto __current_self = tokens.New<VoidTypeRef>();__current_self;
 });
 return result;
 }
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
-auto __current_self = new NamedTypeRef;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<NamedTypeRef>();__current_self->name = _tmp_0;
 __current_self;
 });
 return result;
@@ -654,7 +666,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str("::")) {
 tokens.expect("::");
 auto result = ({
-auto __current_self = new MemberTypeRef;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<MemberTypeRef>();__current_self->base = _tmp_0;
 __current_self->name = tokens.expect(tok::identifier);
 __current_self;
 });
@@ -664,7 +676,7 @@ continue;
 if (tokens.peak_check_str("<")) {
 tokens.expect("<");
 auto result = ({
-auto __current_self = new TemplateTypeRef;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<TemplateTypeRef>();__current_self->base = _tmp_0;
 __current_self->args = ([&]{
 std::vector<TypeRef*> __current_vector__;
     while (true) {
@@ -692,8 +704,20 @@ return result;
 Expr* _production_Expr_group_0(Tokenizer& tokens) {
 if (tokens.peak_check_str("new")) {
 tokens.expect("new");
+if (tokens.peak_check_str("[")) {
+tokens.expect("[");
 auto result = ({
-auto __current_self = new NewExpr;__current_self->type = _production_TypeRef(tokens);
+auto __current_self = tokens.New<NewArenaExpr>();__current_self->arena_name = tokens.expect(tok::identifier);
+tokens.expect("]");
+__current_self->type = _production_TypeRef(tokens);
+__current_self->body = _production_CompoundStmt(tokens);
+__current_self;
+});
+return result;
+}
+auto _tmp_0 = _production_TypeRef(tokens);
+auto result = ({
+auto __current_self = tokens.New<NewExpr>();__current_self->type = _tmp_0;
 __current_self->body = _production_CompoundStmt(tokens);
 __current_self;
 });
@@ -702,7 +726,7 @@ return result;
 if (tokens.peak_check(tok::number)) {
 auto _tmp_0 = tokens.expect(tok::number);
 auto result = ({
-auto __current_self = new NumberExpr;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<NumberExpr>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -710,7 +734,7 @@ return result;
 if (tokens.peak_check(tok::str)) {
 auto _tmp_0 = tokens.expect(tok::str);
 auto result = ({
-auto __current_self = new StrExpr;__current_self->value = _tmp_0;
+auto __current_self = tokens.New<StrExpr>();__current_self->value = _tmp_0;
 __current_self;
 });
 return result;
@@ -718,7 +742,7 @@ return result;
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
-auto __current_self = new NamedExpr;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<NamedExpr>();__current_self->name = _tmp_0;
 __current_self;
 });
 return result;
@@ -731,7 +755,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str(".")) {
 tokens.expect(".");
 auto result = ({
-auto __current_self = new DotExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<DotExpr>();__current_self->base = _tmp_0;
 __current_self->name = tokens.expect(tok::identifier);
 __current_self;
 });
@@ -741,7 +765,7 @@ continue;
 if (tokens.peak_check_str("->")) {
 tokens.expect("->");
 auto result = ({
-auto __current_self = new ArrowExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<ArrowExpr>();__current_self->base = _tmp_0;
 __current_self->name = tokens.expect(tok::identifier);
 __current_self;
 });
@@ -751,7 +775,7 @@ continue;
 if (tokens.peak_check_str("[")) {
 tokens.expect("[");
 auto result = ({
-auto __current_self = new IndexExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<IndexExpr>();__current_self->base = _tmp_0;
 __current_self->args = ([&]{
 std::vector<Expr*> __current_vector__;
    if (!tokens.peak_check_str("]")) {
@@ -773,7 +797,7 @@ continue;
 if (tokens.peak_check_str("::")) {
 tokens.expect("::");
 auto result = ({
-auto __current_self = new ColonColonExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<ColonColonExpr>();__current_self->base = _tmp_0;
 __current_self->name = tokens.expect(tok::identifier);
 __current_self;
 });
@@ -783,7 +807,7 @@ continue;
 if (tokens.peak_check_str("(")) {
 tokens.expect("(");
 auto result = ({
-auto __current_self = new CallExpr;__current_self->base = _tmp_0;
+auto __current_self = tokens.New<CallExpr>();__current_self->base = _tmp_0;
 __current_self->args = ([&]{
 std::vector<Expr*> __current_vector__;
    if (!tokens.peak_check_str(")")) {
@@ -812,7 +836,7 @@ while (true) {
 auto _tmp_0 = expr_result;if (tokens.peak_check_str("==")) {
 tokens.expect("==");
 auto result = ({
-auto __current_self = new CompEqEqExpr;__current_self->lhs = _tmp_0;
+auto __current_self = tokens.New<CompEqEqExpr>();__current_self->lhs = _tmp_0;
 __current_self->rhs = _production_Expr_group_1(tokens);
 __current_self;
 });
@@ -828,7 +852,7 @@ auto _tmp_0 = _production_Expr_group_2(tokens);
 if (tokens.peak_check_str("=")) {
 tokens.expect("=");
 auto result = ({
-auto __current_self = new AssignExpr;__current_self->lhs = _tmp_0;
+auto __current_self = tokens.New<AssignExpr>();__current_self->lhs = _tmp_0;
 __current_self->rhs = _production_Expr_group_3(tokens);
 __current_self;
 });
@@ -845,7 +869,7 @@ Stmt* _production_CompoundStmt(Tokenizer& tokens) {
 if (tokens.peak_check_str("{")) {
 tokens.expect("{");
 auto result = ({
-auto __current_self = new CompoundStmt;__current_self->stmts = ([&]{
+auto __current_self = tokens.New<CompoundStmt>();__current_self->stmts = ([&]{
 std::vector<Stmt*> __current_vector__;
     while (true) {
    if (tokens.peak_check_str("}")) { break; }
@@ -868,13 +892,13 @@ tokens.expect("return");
 if (tokens.peak_check_str(";")) {
 tokens.expect(";");
 auto result = ({
-auto __current_self = new ReturnVoidStmt;__current_self;
+auto __current_self = tokens.New<ReturnVoidStmt>();__current_self;
 });
 return result;
 }
 auto _tmp_0 = _production_Expr(tokens);
 auto result = ({
-auto __current_self = new ReturnStmt;__current_self->expr = _tmp_0;
+auto __current_self = tokens.New<ReturnStmt>();__current_self->expr = _tmp_0;
 tokens.expect(";");
 __current_self;
 });
@@ -883,7 +907,7 @@ return result;
 if (tokens.peak_check_str("let")) {
 tokens.expect("let");
 auto result = ({
-auto __current_self = new LetStmt;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<LetStmt>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->expr = _production_Expr(tokens);
 tokens.expect(";");
@@ -894,7 +918,7 @@ return result;
 if (tokens.peak_check_str("var")) {
 tokens.expect("var");
 auto result = ({
-auto __current_self = new VarStmt;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<VarStmt>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect(":");
 __current_self->type = _production_TypeRef(tokens);
 tokens.expect(";");
@@ -908,7 +932,7 @@ auto _tmp_0 = tokens.expect(tok::identifier);
 if (tokens.peak_check_str(":")) {
 tokens.expect(":");
 auto result = ({
-auto __current_self = new OpenWithTypeStmt;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<OpenWithTypeStmt>();__current_self->name = _tmp_0;
 __current_self->type = _production_TypeRef(tokens);
 __current_self->body = _production_CompoundStmt(tokens);
 __current_self;
@@ -917,7 +941,7 @@ return result;
 }
 auto _tmp_1 = _production_CompoundStmt(tokens);
 auto result = ({
-auto __current_self = new OpenStmt;__current_self->name = _tmp_0;
+auto __current_self = tokens.New<OpenStmt>();__current_self->name = _tmp_0;
 __current_self->body = _tmp_1;
 __current_self;
 });
@@ -926,7 +950,7 @@ return result;
 if (tokens.peak_check_str("case")) {
 tokens.expect("case");
 auto result = ({
-auto __current_self = new CaseStmt;tokens.expect(".");
+auto __current_self = tokens.New<CaseStmt>();tokens.expect(".");
 __current_self->name = tokens.expect(tok::identifier);
 tokens.expect(":");
 __current_self;
@@ -936,7 +960,7 @@ return result;
 if (tokens.peak_check_str("for")) {
 tokens.expect("for");
 auto result = ({
-auto __current_self = new ForStmt;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<ForStmt>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("in");
 __current_self->sequence = _production_Expr(tokens);
 __current_self->body = _production_CompoundStmt(tokens);
@@ -947,7 +971,7 @@ return result;
 if (tokens.peak_check_str("loop")) {
 tokens.expect("loop");
 auto result = ({
-auto __current_self = new LoopStmt;__current_self->body = _production_CompoundStmt(tokens);
+auto __current_self = tokens.New<LoopStmt>();__current_self->body = _production_CompoundStmt(tokens);
 __current_self;
 });
 return result;
@@ -961,7 +985,7 @@ auto _tmp_1 = _production_CompoundStmt(tokens);
 if (tokens.peak_check_str("else")) {
 tokens.expect("else");
 auto result = ({
-auto __current_self = new IfElseStmt;__current_self->cond = _tmp_0;
+auto __current_self = tokens.New<IfElseStmt>();__current_self->cond = _tmp_0;
 __current_self->body = _tmp_1;
 __current_self->else_body = _production_CompoundStmt(tokens);
 __current_self;
@@ -969,7 +993,7 @@ __current_self;
 return result;
 }
 auto result = ({
-auto __current_self = new IfStmt;__current_self->cond = _tmp_0;
+auto __current_self = tokens.New<IfStmt>();__current_self->cond = _tmp_0;
 __current_self->body = _tmp_1;
 __current_self;
 });
@@ -978,7 +1002,7 @@ return result;
 if (tokens.peak_check_str("scope")) {
 tokens.expect("scope");
 auto result = ({
-auto __current_self = new ScopeStmt;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<ScopeStmt>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("=");
 __current_self->expr = _production_Expr(tokens);
 __current_self->body = _production_CompoundStmt(tokens);
@@ -989,7 +1013,7 @@ return result;
 if (tokens.peak_check_str("default")) {
 tokens.expect("default");
 auto result = ({
-auto __current_self = new DefaultStmt;tokens.expect(":");
+auto __current_self = tokens.New<DefaultStmt>();tokens.expect(":");
 __current_self;
 });
 return result;
@@ -997,7 +1021,7 @@ return result;
 if (tokens.peak_check_str("emit")) {
 tokens.expect("emit");
 auto result = ({
-auto __current_self = new EmitterStmt;__current_self->body = _production_CompoundStmt(tokens);
+auto __current_self = tokens.New<EmitterStmt>();__current_self->body = _production_CompoundStmt(tokens);
 __current_self;
 });
 return result;
@@ -1005,7 +1029,7 @@ return result;
 if (tokens.peak_check_str("dbg_emit")) {
 tokens.expect("dbg_emit");
 auto result = ({
-auto __current_self = new DbgEmitterStmt;__current_self->body = _production_CompoundStmt(tokens);
+auto __current_self = tokens.New<DbgEmitterStmt>();__current_self->body = _production_CompoundStmt(tokens);
 __current_self;
 });
 return result;
@@ -1013,14 +1037,14 @@ return result;
 if (tokens.peak_check_str("break")) {
 tokens.expect("break");
 auto result = ({
-auto __current_self = new BreakStmt;tokens.expect(";");
+auto __current_self = tokens.New<BreakStmt>();tokens.expect(";");
 __current_self;
 });
 return result;
 }
 auto _tmp_0 = _production_Expr(tokens);
 auto result = ({
-auto __current_self = new DiscardStmt;__current_self->expr = _tmp_0;
+auto __current_self = tokens.New<DiscardStmt>();__current_self->expr = _tmp_0;
 tokens.expect(";");
 __current_self;
 });
@@ -1028,7 +1052,7 @@ return result;
 }
 FuncArg* _production_FuncArg(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new FuncArg;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<FuncArg>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect(":");
 __current_self->type = _production_TypeRef(tokens);
 __current_self;
@@ -1039,7 +1063,7 @@ Decl* _production_Decl(Tokenizer& tokens) {
 if (tokens.peak_check_str("context")) {
 tokens.expect("context");
 auto result = ({
-auto __current_self = new ContextDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<ContextDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect(":");
 __current_self->type = _production_TypeRef(tokens);
 tokens.expect(";");
@@ -1050,7 +1074,7 @@ return result;
 if (tokens.peak_check_str("func")) {
 tokens.expect("func");
 auto result = ({
-auto __current_self = new FuncDecl;__current_self->name = tokens.expect(tok::identifier);
+auto __current_self = tokens.New<FuncDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("(");
 __current_self->args = ([&]{
 std::vector<FuncArg*> __current_vector__;
@@ -1076,7 +1100,7 @@ tokens.unexpected();
 }
 Module* _production_Module(Tokenizer& tokens) {
 auto result = ({
-auto __current_self = new Module;tokens.expect("module");
+auto __current_self = tokens.New<Module>();tokens.expect("module");
 __current_self->mod_name = tokens.expect(tok::identifier);
 tokens.expect(";");
 __current_self->decls = ([&]{

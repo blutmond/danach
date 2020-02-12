@@ -13,7 +13,8 @@ std::vector<CollapsedBuffer> Collapse(const std::vector<ParsedIdBuffer>& src) {
 void EmitFromMultiBuffer(const std::vector<CollapsedBuffer>& buffers) {
   using namespace emit_manifest;
   auto& tmp = buffers;
-  emit_manifest::Tokenizer tokens(tmp[0].text.c_str());
+  ASTContext context;
+  emit_manifest::Tokenizer tokens(context, tmp[0].text.c_str());
   auto get_chunk = [&](ChunkSrc* src) -> const std::string& {
     int id = stoi(std::string(src->id.str));
     assert(id >= 0 && id < tmp.size());

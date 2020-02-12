@@ -23,7 +23,7 @@ struct FieldTypeCheckContext {
     } else {
       // Make new struct type.
       for (auto& field : fields) {
-        auto* fdecl = new TypeLetDecl;
+        auto* fdecl = globals->New<TypeLetDecl>();
         fdecl->name.str = field.name;
         fdecl->type = field.type;
         struct_type->decls.push_back(fdecl);
@@ -39,14 +39,14 @@ struct TypeCheckContext {
   int pop_id = 0;
   
   TypeCheckContext* ConcatContext() {
-    auto* res = new TypeCheckContext;
+    auto* res = New<TypeCheckContext>();
     res->globals = globals;
     res->self = self;
     return res;
   }
 
   static TypeCheckContext* makeRoot(ModuleContext* globals) {
-    auto* res = new TypeCheckContext;
+    auto* res = globals->New<TypeCheckContext>();
     res->globals = globals;
     return res;
   }
@@ -62,19 +62,24 @@ struct TypeCheckContext {
   }
   
   FieldTypeCheckContext* newTypeCtx() {
-    auto* res = new FieldTypeCheckContext;
+    auto* res = New<FieldTypeCheckContext>();
     res->globals = globals;
     return res;
   }
 
   TypeCheckContext* NewConditionalContext() {
-    return new TypeCheckContext(*this);
+    return New<TypeCheckContext>(*this);
   }
 
   TypeDeclExpr* Pop() {
     assert(pop_id < decls.size());
     return decls[pop_id++];
   }
+
+  template <typename T>
+  T* New() { return globals->New<T>(); }
+  template <typename T>
+  T* New(const T& t) { return globals->New<T>(t); }
 };
 
 static TypeDeclExpr* theTokenType = [] {
