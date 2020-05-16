@@ -43,8 +43,12 @@ struct FileContext {
   LibraryBuildResult* Eval(string_view name, rule_spec::BufferParserDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::BufferLoweringSpecDecl* decl);
   LibraryBuildResult* Eval(string_view name, rule_spec::LetDecl* decl);
+  LibraryBuildResult* Eval(string_view name, rule_spec::WidgetSpecDecl* decl);
   unit Eval(string_view name, rule_spec::SoLinkDecl* decl);
   unit Eval(string_view name, rule_spec::LinkDecl* decl);
+
+  std::vector<std::string> BufferContentsArgList(rule_spec::Option* option,
+                                                 const std::string& gen_dir);
 
   template <typename ResultT>
       ResultT EvalRule(string_view rule, rule_spec::Decl* decl) {
@@ -67,6 +71,7 @@ struct FileContext {
               VISIT_TYPE(Passes)
               VISIT_TYPE(Import)
               VISIT_TYPE(ImportBuffer)
+              VISIT_TYPE(WidgetSpec)
               VISIT_TYPE(BufferParser)
               VISIT_TYPE(BufferLoweringSpec)
               VISIT_TYPE(Link)
@@ -91,6 +96,7 @@ struct FileContext {
               VISIT_TYPE(Passes)
               VISIT_TYPE(Import)
               VISIT_TYPE(ImportBuffer)
+              VISIT_TYPE(WidgetSpec)
               VISIT_TYPE(BufferParser)
               VISIT_TYPE(BufferLoweringSpec)
               VISIT_TYPE(Link)
@@ -140,6 +146,7 @@ struct GlobalContext {
   std::unordered_map<std::string, VirtualFileCollection> buffer_cache;
 
   LibraryBuildResult* default_flags = MakeDefaultFlags(ctx);
+  LibraryBuildResult* default_buffer_flags = MakeDefaultBufferFlags(ctx);
   LibraryBuildResult* so_flags = MakeSoFlags(ctx);
   LibraryBuildResult* gtk_flags = MakeGtkFlags(ctx);
   LibraryBuildResult* dl_flags = MakeDLFlags(ctx);

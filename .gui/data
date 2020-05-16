@@ -25,6 +25,9 @@ view "Metadata" {
   raw 0;
   raw 1;
 }
+view "BUILD" {
+  raw 13;
+}
 view "Collapse" {
   raw 2;
   raw 3;
@@ -39,6 +42,7 @@ view "Main" {
 }
 #2
 ##include "gui/buffer.h"
+##include "gui/emit-buffer.h"
 #3
 struct CollapsedBuffer {
   size_t id;
@@ -60,7 +64,8 @@ void EmitFromMultiBuffer()
 #8
 using namespace emit_manifest;
 auto tmp = Collapse(ParseMultiBuffer(LoadFile(".gui/data")));
-emit_manifest::Tokenizer tokens(tmp[0].text.c_str());
+ASTContext context;
+emit_manifest::Tokenizer tokens(context, tmp[0].text.c_str());
 auto get_chunk = [&](ChunkSrc* src) -> const std::string& {
   int id = stoi(std::string(src->id.str));
   assert(id >= 0 && id < tmp.size());
@@ -104,10 +109,10 @@ for (EmitFileDecl* emit_file : m->decls) {
 #11
 int main()
 #12
-EmitFromMultiBuffer();
+// EmitFromMultiBuffer();
 
 rules::GlobalContext ctx;
-
+/*
 auto* dep1 = ctx.GetRule("src/gui", "buffer");
 auto* dep2 = ctx.GetRule("src/rules", "rule_invoker");
 auto* dep3 = ctx.GetRule("src/gui", "emit_manifest");
@@ -123,5 +128,31 @@ BuildLinkCommand(&cmd);
 
 RunTrace({"/bin/mv", ".build/run-buffer-tests-dynamic", ".build/run-buffer-tests"});
 EmitCompilerTrace("tools/gui-test-bootstrapping.sh");
-
+*/
+ctx.GetFile("src/rules")->LinkOrTrigger("run-buffer-tests");
 fprintf(stderr, "\e[32mSuccess!\e[m\n");
+#13
+import "src/gui" as gui;
+import "src/rules" as rules;
+
+lib self_builder {
+  hdrs = [file "gen-0.h" {
+    pragma_once;
+    hdr_chunk 2;
+    fwd_declare_func 7;
+  }];
+  srcs = [file "gen-0.cc" {
+    import "buffer_test/gen-0.h";
+    hdr_chunk 6;
+    define_func 7, 8;
+  }, file "gen-1.cc" {
+    import "buffer_test/gen-0.h";
+    hdr_chunk 9;
+    hdr_chunk 10;
+    define_func 11, 12;
+  }];
+  gen_dir = ".generated/src/buffer_test";
+  deps = [
+    gui.buffer, rules.rule_invoker, gui.emit_manifest
+  ];
+}

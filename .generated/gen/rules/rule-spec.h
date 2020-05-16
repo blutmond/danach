@@ -80,6 +80,13 @@ struct Tokenizer {
 };
 }  // namespace rule_spec
 namespace rule_spec{
+struct Action;
+struct PragmaOnceAction;
+struct ImportAction;
+struct HdrChunkAction;
+struct FwdDeclareFuncAction;
+struct DefineFuncAction;
+struct ChunkSrc;
 struct Decl;
 struct ImportDecl;
 struct ImportBufferDecl;
@@ -87,6 +94,7 @@ struct LetDecl;
 struct BufferParserDecl;
 struct BufferLoweringSpecDecl;
 struct OldParserDecl;
+struct WidgetSpecDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
 struct PassesDecl;
@@ -94,6 +102,7 @@ struct PassesTemplateDecl;
 struct LinkDecl;
 struct SoLinkDecl;
 struct Expr;
+struct FileEmitExpr;
 struct NameExpr;
 struct StringLiteralExpr;
 struct IntegerLiteralExpr;
@@ -102,9 +111,48 @@ struct DotExpr;
 struct Module;
 struct Option;
 
+struct Action {
+  enum class Kind {
+    PragmaOnce, Import, HdrChunk, FwdDeclareFunc, DefineFunc,
+  };
+  Action(Kind kind) : kind_(kind) {}
+ Kind getKind() { return kind_; }
+ private:
+  Kind kind_;
+};
+
+struct PragmaOnceAction: public Action {
+  PragmaOnceAction() : Action(Kind::PragmaOnce) {}
+};
+
+struct ImportAction: public Action {
+  ImportAction() : Action(Kind::Import) {}
+  tok::Token filename;
+};
+
+struct HdrChunkAction: public Action {
+  HdrChunkAction() : Action(Kind::HdrChunk) {}
+  ChunkSrc* id;
+};
+
+struct FwdDeclareFuncAction: public Action {
+  FwdDeclareFuncAction() : Action(Kind::FwdDeclareFunc) {}
+  ChunkSrc* id;
+};
+
+struct DefineFuncAction: public Action {
+  DefineFuncAction() : Action(Kind::DefineFunc) {}
+  ChunkSrc* sig_id;
+  ChunkSrc* body_id;
+};
+
+struct ChunkSrc {
+  tok::Token id;
+};
+
 struct Decl {
   enum class Kind {
-    Import, ImportBuffer, Let, BufferParser, BufferLoweringSpec, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, Let, BufferParser, BufferLoweringSpec, OldParser, WidgetSpec, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -149,6 +197,12 @@ struct OldParserDecl: public Decl {
   std::vector<Option*> options;
 };
 
+struct WidgetSpecDecl: public Decl {
+  WidgetSpecDecl() : Decl(Kind::WidgetSpec) {}
+  tok::Token name;
+  std::vector<Option*> options;
+};
+
 struct OldLoweringSpecDecl: public Decl {
   OldLoweringSpecDecl() : Decl(Kind::OldLoweringSpec) {}
   tok::Token name;
@@ -187,12 +241,18 @@ struct SoLinkDecl: public Decl {
 
 struct Expr {
   enum class Kind {
-    Name, StringLiteral, IntegerLiteral, ArrayLiteral, Dot,
+    FileEmit, Name, StringLiteral, IntegerLiteral, ArrayLiteral, Dot,
   };
   Expr(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
  private:
   Kind kind_;
+};
+
+struct FileEmitExpr: public Expr {
+  FileEmitExpr() : Expr(Kind::FileEmit) {}
+  tok::Token fname;
+  std::vector<Action*> actions;
 };
 
 struct NameExpr: public Expr {
@@ -233,6 +293,8 @@ struct Option {
 namespace rule_spec{
 namespace parser {
 Module* DoParse(Tokenizer& tokens);
+ChunkSrc* _production_ChunkSrc(Tokenizer& tokens);
+Action* _production_Action(Tokenizer& tokens);
 Expr* _production_Expr_group_0(Tokenizer& tokens);
 Expr* _production_Expr_group_1(Tokenizer& tokens);
 Expr* _production_Expr(Tokenizer& tokens);

@@ -3,7 +3,18 @@ module rule_spec;
 entry Module;
 tokenizer basic;
 
+define ChunkSrc { %id = number }
+
+production Action {
+  pattern PragmaOnce { "pragma_once" ";" }
+  pattern Import { "import" %filename = str ";" }
+  pattern HdrChunk { "hdr_chunk" %id = ChunkSrc ";" }
+  pattern FwdDeclareFunc { "fwd_declare_func" %id = ChunkSrc ";" }
+  pattern DefineFunc { "define_func" %sig_id = ChunkSrc "," %body_id = ChunkSrc ";" }
+}
+
 expr Expr {
+  pattern FileEmit { "file" %fname = str "{" %actions = concat { Action } "}" }
   pattern Name { %name = identifier }
   pattern StringLiteral { %value = str }
   pattern IntegerLiteral { %value = number }
@@ -22,6 +33,7 @@ production Decl {
   pattern BufferParser { "buf_parser"  %name = identifier "{" %options = concat { Option } "}" }
   pattern BufferLoweringSpec { "buf_lowering_spec"  %name = identifier "{" %options = concat { Option } "}" }
   pattern OldParser {"old_parser" %name = identifier "{" %options = concat { Option } "}" }
+  pattern WidgetSpec { "widget" %name = identifier "{" %options = concat { Option } "}" }
   pattern OldLoweringSpec { "old_lowering_spec" %name = identifier "{" %options = concat { Option } "}" }
   pattern Library {"lib" %name = identifier "{" %options = concat { Option } "}" }
   pattern Passes {"passes" %name = identifier "{" %options = concat { Option } "}" }

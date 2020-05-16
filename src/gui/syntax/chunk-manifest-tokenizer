@@ -1,4 +1,4 @@
-module example;
+module chunk_manifest;
 
 regex basic {
   let digit = "0" : "9";
@@ -20,13 +20,13 @@ regex basic {
   emit open_bracket = "[";
   emit close_bracket = "]";
   emit percent = "%";
+  emit bang = "!";
   emit arrow = "->";
   emit colon = ":";
   emit coloncolon = "::";
   emit eof = 0;
   ignore "\n";
   ignore " ";
-  ignore "/" . "/" . (9 | " " : "~")*;
   emit identifier = id . (id | digit)*;
   emit str = "\"" . (("\\" . all) | (" " : "!") | ("#" : "[") | ("]" : "~"))* . "\"";
   emit number = digit+;

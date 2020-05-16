@@ -81,122 +81,142 @@ c = *cur;
  ++cur; 
 c = *cur; 
  goto bb12; }
-  if (c >= '0' && c <= '9') { 
+  if (c =='/') { 
  ++cur; 
 c = *cur; 
  goto bb13; }
-  if (c ==':') { 
+  if (c >= '0' && c <= '9') { 
  ++cur; 
 c = *cur; 
  goto bb14; }
-  if (c ==';') { 
- ++cur; 
-c = *cur; 
- goto bb15; }
-  if (c =='<') { 
- ++cur; 
-c = *cur; 
- goto bb16; }
-  if (c =='=') { 
- ++cur; 
-c = *cur; 
- goto bb17; }
-  if (c =='>') { 
- ++cur; 
-c = *cur; 
- goto bb18; }
-  if (c >= 'A' && c <= 'Z') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  if (c =='[') { 
- ++cur; 
-c = *cur; 
- goto bb20; }
-  if (c ==']') { 
- ++cur; 
-c = *cur; 
- goto bb21; }
-  if (c =='_') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  if (c >= 'a' && c <= 'z') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  if (c =='{') { 
- ++cur; 
-c = *cur; 
- goto bb22; }
-  if (c =='|') { 
- ++cur; 
-c = *cur; 
- goto bb23; }
-  if (c =='}') { 
- ++cur; 
-c = *cur; 
- goto bb24; }
-  unexpected(c);
-bb24:
-  return MakeToken(tok::close_brace, st, cur);
-bb23:
-  return MakeToken(tok::pipe, st, cur);
-bb22:
-  return MakeToken(tok::open_brace, st, cur);
-bb21:
-  return MakeToken(tok::close_bracket, st, cur);
-bb20:
-  return MakeToken(tok::open_bracket, st, cur);
-bb19:
-  if (c >= '0' && c <= '9') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  if (c >= 'A' && c <= 'Z') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  if (c =='_') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  if (c >= 'a' && c <= 'z') { 
- ++cur; 
-c = *cur; 
- goto bb19; }
-  return MakeToken(tok::identifier, st, cur);
-bb18:
-  return MakeToken(tok::close_arr, st, cur);
-bb17:
-  return MakeToken(tok::equal, st, cur);
-bb16:
-  return MakeToken(tok::open_arr, st, cur);
-bb15:
-  return MakeToken(tok::semi, st, cur);
-bb14:
   if (c ==':') { 
  ++cur; 
 c = *cur; 
+ goto bb15; }
+  if (c ==';') { 
+ ++cur; 
+c = *cur; 
+ goto bb16; }
+  if (c =='<') { 
+ ++cur; 
+c = *cur; 
+ goto bb17; }
+  if (c =='=') { 
+ ++cur; 
+c = *cur; 
+ goto bb18; }
+  if (c =='>') { 
+ ++cur; 
+c = *cur; 
+ goto bb19; }
+  if (c >= 'A' && c <= 'Z') { 
+ ++cur; 
+c = *cur; 
+ goto bb20; }
+  if (c =='[') { 
+ ++cur; 
+c = *cur; 
+ goto bb21; }
+  if (c ==']') { 
+ ++cur; 
+c = *cur; 
+ goto bb22; }
+  if (c =='_') { 
+ ++cur; 
+c = *cur; 
+ goto bb20; }
+  if (c >= 'a' && c <= 'z') { 
+ ++cur; 
+c = *cur; 
+ goto bb20; }
+  if (c =='{') { 
+ ++cur; 
+c = *cur; 
+ goto bb23; }
+  if (c =='|') { 
+ ++cur; 
+c = *cur; 
+ goto bb24; }
+  if (c =='}') { 
+ ++cur; 
+c = *cur; 
  goto bb25; }
-  return MakeToken(tok::colon, st, cur);
+  unexpected(c);
 bb25:
-  return MakeToken(tok::coloncolon, st, cur);
-bb13:
+  return MakeToken(tok::close_brace, st, cur);
+bb24:
+  return MakeToken(tok::pipe, st, cur);
+bb23:
+  return MakeToken(tok::open_brace, st, cur);
+bb22:
+  return MakeToken(tok::close_bracket, st, cur);
+bb21:
+  return MakeToken(tok::open_bracket, st, cur);
+bb20:
   if (c >= '0' && c <= '9') { 
  ++cur; 
 c = *cur; 
- goto bb13; }
+ goto bb20; }
+  if (c >= 'A' && c <= 'Z') { 
+ ++cur; 
+c = *cur; 
+ goto bb20; }
+  if (c =='_') { 
+ ++cur; 
+c = *cur; 
+ goto bb20; }
+  if (c >= 'a' && c <= 'z') { 
+ ++cur; 
+c = *cur; 
+ goto bb20; }
+  return MakeToken(tok::identifier, st, cur);
+bb19:
+  return MakeToken(tok::close_arr, st, cur);
+bb18:
+  return MakeToken(tok::equal, st, cur);
+bb17:
+  return MakeToken(tok::open_arr, st, cur);
+bb16:
+  return MakeToken(tok::semi, st, cur);
+bb15:
+  if (c ==':') { 
+ ++cur; 
+c = *cur; 
+ goto bb26; }
+  return MakeToken(tok::colon, st, cur);
+bb26:
+  return MakeToken(tok::coloncolon, st, cur);
+bb14:
+  if (c >= '0' && c <= '9') { 
+ ++cur; 
+c = *cur; 
+ goto bb14; }
   return MakeToken(tok::number, st, cur);
+bb13:
+  if (c =='/') { 
+ ++cur; 
+c = *cur; 
+ goto bb27; }
+  unexpected(c);
+bb27:
+  if (c ==9) { 
+ ++cur; 
+c = *cur; 
+ goto bb27; }
+  if (c >= ' ' && c <= '~') { 
+ ++cur; 
+c = *cur; 
+ goto bb27; }
+  goto start;
 bb12:
   return MakeToken(tok::dot, st, cur);
 bb11:
   if (c =='>') { 
  ++cur; 
 c = *cur; 
- goto bb26; }
+ goto bb28; }
   unexpected(c);
-bb26:
+bb28:
   return MakeToken(tok::arrow, st, cur);
 bb10:
   return MakeToken(tok::comma, st, cur);
@@ -218,7 +238,7 @@ c = *cur;
   if (c =='"') { 
  ++cur; 
 c = *cur; 
- goto bb27; }
+ goto bb29; }
   if (c >= '#' && c <= '[') { 
  ++cur; 
 c = *cur; 
@@ -226,19 +246,19 @@ c = *cur;
   if (c =='\\') { 
  ++cur; 
 c = *cur; 
- goto bb28; }
+ goto bb30; }
   if (c >= ']' && c <= '~') { 
  ++cur; 
 c = *cur; 
  goto bb4; }
   unexpected(c);
-bb28:
+bb30:
   if (c >= ' ' && c <= '~') { 
  ++cur; 
 c = *cur; 
  goto bb4; }
   unexpected(c);
-bb27:
+bb29:
   return MakeToken(tok::str, st, cur);
 bb3:
   goto start;
@@ -308,6 +328,13 @@ struct Tokenizer {
 };
 }  // namespace rule_spec
 namespace rule_spec{
+struct Action;
+struct PragmaOnceAction;
+struct ImportAction;
+struct HdrChunkAction;
+struct FwdDeclareFuncAction;
+struct DefineFuncAction;
+struct ChunkSrc;
 struct Decl;
 struct ImportDecl;
 struct ImportBufferDecl;
@@ -315,6 +342,7 @@ struct LetDecl;
 struct BufferParserDecl;
 struct BufferLoweringSpecDecl;
 struct OldParserDecl;
+struct WidgetSpecDecl;
 struct OldLoweringSpecDecl;
 struct LibraryDecl;
 struct PassesDecl;
@@ -322,6 +350,7 @@ struct PassesTemplateDecl;
 struct LinkDecl;
 struct SoLinkDecl;
 struct Expr;
+struct FileEmitExpr;
 struct NameExpr;
 struct StringLiteralExpr;
 struct IntegerLiteralExpr;
@@ -330,9 +359,48 @@ struct DotExpr;
 struct Module;
 struct Option;
 
+struct Action {
+  enum class Kind {
+    PragmaOnce, Import, HdrChunk, FwdDeclareFunc, DefineFunc,
+  };
+  Action(Kind kind) : kind_(kind) {}
+ Kind getKind() { return kind_; }
+ private:
+  Kind kind_;
+};
+
+struct PragmaOnceAction: public Action {
+  PragmaOnceAction() : Action(Kind::PragmaOnce) {}
+};
+
+struct ImportAction: public Action {
+  ImportAction() : Action(Kind::Import) {}
+  tok::Token filename;
+};
+
+struct HdrChunkAction: public Action {
+  HdrChunkAction() : Action(Kind::HdrChunk) {}
+  ChunkSrc* id;
+};
+
+struct FwdDeclareFuncAction: public Action {
+  FwdDeclareFuncAction() : Action(Kind::FwdDeclareFunc) {}
+  ChunkSrc* id;
+};
+
+struct DefineFuncAction: public Action {
+  DefineFuncAction() : Action(Kind::DefineFunc) {}
+  ChunkSrc* sig_id;
+  ChunkSrc* body_id;
+};
+
+struct ChunkSrc {
+  tok::Token id;
+};
+
 struct Decl {
   enum class Kind {
-    Import, ImportBuffer, Let, BufferParser, BufferLoweringSpec, OldParser, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
+    Import, ImportBuffer, Let, BufferParser, BufferLoweringSpec, OldParser, WidgetSpec, OldLoweringSpec, Library, Passes, PassesTemplate, Link, SoLink,
   };
   Decl(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
@@ -377,6 +445,12 @@ struct OldParserDecl: public Decl {
   std::vector<Option*> options;
 };
 
+struct WidgetSpecDecl: public Decl {
+  WidgetSpecDecl() : Decl(Kind::WidgetSpec) {}
+  tok::Token name;
+  std::vector<Option*> options;
+};
+
 struct OldLoweringSpecDecl: public Decl {
   OldLoweringSpecDecl() : Decl(Kind::OldLoweringSpec) {}
   tok::Token name;
@@ -415,12 +489,18 @@ struct SoLinkDecl: public Decl {
 
 struct Expr {
   enum class Kind {
-    Name, StringLiteral, IntegerLiteral, ArrayLiteral, Dot,
+    FileEmit, Name, StringLiteral, IntegerLiteral, ArrayLiteral, Dot,
   };
   Expr(Kind kind) : kind_(kind) {}
  Kind getKind() { return kind_; }
  private:
   Kind kind_;
+};
+
+struct FileEmitExpr: public Expr {
+  FileEmitExpr() : Expr(Kind::FileEmit) {}
+  tok::Token fname;
+  std::vector<Action*> actions;
 };
 
 struct NameExpr: public Expr {
@@ -461,6 +541,8 @@ struct Option {
 namespace rule_spec{
 namespace parser {
 Module* DoParse(Tokenizer& tokens);
+ChunkSrc* _production_ChunkSrc(Tokenizer& tokens);
+Action* _production_Action(Tokenizer& tokens);
 Expr* _production_Expr_group_0(Tokenizer& tokens);
 Expr* _production_Expr_group_1(Tokenizer& tokens);
 Expr* _production_Expr(Tokenizer& tokens);
@@ -470,7 +552,83 @@ Module* _production_Module(Tokenizer& tokens);
 Module* DoParse(Tokenizer& tokens) {
   return _production_Module(tokens);
 }
+ChunkSrc* _production_ChunkSrc(Tokenizer& tokens) {
+auto result = ({
+auto __current_self = tokens.New<ChunkSrc>();__current_self->id = tokens.expect(tok::number);
+__current_self;
+});
+return result;
+}
+Action* _production_Action(Tokenizer& tokens) {
+if (tokens.peak_check_str("pragma_once")) {
+tokens.expect("pragma_once");
+auto result = ({
+auto __current_self = tokens.New<PragmaOnceAction>();tokens.expect(";");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("import")) {
+tokens.expect("import");
+auto result = ({
+auto __current_self = tokens.New<ImportAction>();__current_self->filename = tokens.expect(tok::str);
+tokens.expect(";");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("hdr_chunk")) {
+tokens.expect("hdr_chunk");
+auto result = ({
+auto __current_self = tokens.New<HdrChunkAction>();__current_self->id = _production_ChunkSrc(tokens);
+tokens.expect(";");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("fwd_declare_func")) {
+tokens.expect("fwd_declare_func");
+auto result = ({
+auto __current_self = tokens.New<FwdDeclareFuncAction>();__current_self->id = _production_ChunkSrc(tokens);
+tokens.expect(";");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("define_func")) {
+tokens.expect("define_func");
+auto result = ({
+auto __current_self = tokens.New<DefineFuncAction>();__current_self->sig_id = _production_ChunkSrc(tokens);
+tokens.expect(",");
+__current_self->body_id = _production_ChunkSrc(tokens);
+tokens.expect(";");
+__current_self;
+});
+return result;
+}
+tokens.unexpected();
+}
 Expr* _production_Expr_group_0(Tokenizer& tokens) {
+if (tokens.peak_check_str("file")) {
+tokens.expect("file");
+auto result = ({
+auto __current_self = tokens.New<FileEmitExpr>();__current_self->fname = tokens.expect(tok::str);
+tokens.expect("{");
+__current_self->actions = ([&]{
+std::vector<Action*> __current_vector__;
+    while (true) {
+   if (tokens.peak_check_str("}")) { break; }
+ __current_vector__.push_back([&]{auto result = _production_Action(tokens);
+return result;
+ }());  }
+return __current_vector__;
+}())
+;
+tokens.expect("}");
+__current_self;
+});
+return result;
+}
 if (tokens.peak_check(tok::identifier)) {
 auto _tmp_0 = tokens.expect(tok::identifier);
 auto result = ({
@@ -632,6 +790,26 @@ if (tokens.peak_check_str("old_parser")) {
 tokens.expect("old_parser");
 auto result = ({
 auto __current_self = tokens.New<OldParserDecl>();__current_self->name = tokens.expect(tok::identifier);
+tokens.expect("{");
+__current_self->options = ([&]{
+std::vector<Option*> __current_vector__;
+    while (true) {
+   if (tokens.peak_check_str("}")) { break; }
+ __current_vector__.push_back([&]{auto result = _production_Option(tokens);
+return result;
+ }());  }
+return __current_vector__;
+}())
+;
+tokens.expect("}");
+__current_self;
+});
+return result;
+}
+if (tokens.peak_check_str("widget")) {
+tokens.expect("widget");
+auto result = ({
+auto __current_self = tokens.New<WidgetSpecDecl>();__current_self->name = tokens.expect(tok::identifier);
 tokens.expect("{");
 __current_self->options = ([&]{
 std::vector<Option*> __current_vector__;

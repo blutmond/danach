@@ -256,6 +256,7 @@ struct WindowState {
     }
   }
   void InitEvents();
+  void InitBuffers();
 };
 
 gboolean WindowState::ScrollEvent(GdkEventScroll* event) {
@@ -392,6 +393,11 @@ void WindowState::InitEvents() {
           delete state;
           return FALSE;
   }), this);
+
+  InitBuffers();
+}
+
+void WindowState::InitBuffers() {
 
   auto tmp = ParseMultiBuffer(LoadFile(filename_));
 

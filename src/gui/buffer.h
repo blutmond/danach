@@ -13,6 +13,11 @@ struct BufferPos {
   size_t col = 0;
 };
 
+struct BufferRange {
+  BufferPos st;
+  BufferPos ed;
+};
+
 struct Buffer {
   std::vector<std::string> lines{{""}};
 

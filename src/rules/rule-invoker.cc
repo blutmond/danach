@@ -6,6 +6,7 @@
 #include "parser/parser-support.h"
 #include "parser/lowering_spec_lowering.h"
 #include "parser/parser_lowering.h"
+#include "gui/widget-spec-lowering.h"
 #include "rules/template-support.h"
 
 namespace {
@@ -68,6 +69,7 @@ std::string GetName(rule_spec::Decl* decl) {
     DEFINE_NAME(Passes, name, std::string)
     DEFINE_NAME(Import, name, std::string)
     DEFINE_NAME(ImportBuffer, name, std::string)
+    DEFINE_NAME(WidgetSpec, name, std::string)
     DEFINE_NAME(BufferParser, name, std::string)
     DEFINE_NAME(Let, name, std::string)
     DEFINE_NAME(BufferLoweringSpec, name, std::string)
@@ -128,10 +130,63 @@ void SimpleOldLoweringSpecGen(const char* lowering_spec, const std::string& outn
 }
 namespace rules {
 
+// Only needed cause we can't pass code directly into the c++ compiler...
+std::vector<std::string> FileContext::BufferContentsArgList(rule_spec::Option* option,
+                                                            const std::string& gen_dir) {
+  using namespace rule_spec;
+  std::vector<std::string> out;
+  if (!option) return out;
+  assert(option->value->getKind() == Expr::Kind::ArrayLiteral && "Must be array literal...");
+  auto* value = reinterpret_cast<ArrayLiteralExpr*>(option->value);
+  for (auto* child : value->values) {
+    assert(child->getKind() == Expr::Kind::FileEmit && "Must be a file emit literal...");
+    auto* to_emit = reinterpret_cast<FileEmitExpr*>(child);
+    out.push_back(Unescaped(to_emit->fname.str));
+
+    auto get_chunk = [&](ChunkSrc* src) -> const std::string& {
+      int id = stoi(std::string(src->id.str));
+      assert(id >= 0 && id < mid_parent->buffer.size());
+      assert(mid_parent && "Must have mid parent");
+      return mid_parent->buffer.at(id).text;
+    };
+    EmitStream stream;
+
+    for (Action* action_ : to_emit->actions) {
+      switch (action_->getKind()) {
+      case Action::Kind::PragmaOnce: {
+        stream.stream() << "#pragma once\n\n";
+        break;
+      } case Action::Kind::Import: {
+        auto* action = reinterpret_cast<ImportAction*>(action_);
+        stream.stream() << "#include " << action->filename.str << "\n";
+        break;
+      } case Action::Kind::HdrChunk: {
+        auto* action = reinterpret_cast<HdrChunkAction*>(action_);
+        stream.stream() << get_chunk(action->id) << "\n";
+        break;
+      } case Action::Kind::FwdDeclareFunc: {
+        auto* action = reinterpret_cast<FwdDeclareFuncAction*>(action_);
+        stream.stream() << get_chunk(action->id) << ";\n";
+        break;
+      } case Action::Kind::DefineFunc: {
+        auto* action = reinterpret_cast<DefineFuncAction*>(action_);
+        stream.stream() << get_chunk(action->sig_id) << " {\n";
+        stream.stream() << get_chunk(action->body_id) << "\n}\n";
+        break;
+      }
+      }
+    }
+
+    stream.write(gen_dir + "/" + Unescaped(to_emit->fname.str));
+  }
+  return out;
+}
+
 rule_spec::Decl* FileContext::GetDecl(string_view rule) {
   auto it = data.find(std::string(rule));
   if (it == data.end()) {
-    fprintf(stderr, "Could not find rule: \"%s\"\n", std::string(rule).c_str());
+    fprintf(stderr, "Could not find rule: \"%s\" in \"%s\"\n", std::string(rule).c_str(),
+            filename.c_str());
     exit(-1);
   }
   return it->second;
@@ -171,7 +226,7 @@ FileContext* FileContext::Eval(string_view name, rule_spec::ImportBufferDecl* de
   if (it == parent->buffer_cache.end()) {
     auto data = Collapse(ParseMultiBuffer(LoadFile(Unescaped(decl->filename.str))));
 
-    EmitFromMultiBuffer(data);
+    // EmitFromMultiBuffer(data);
 
     auto& my_result = parent->buffer_cache[filename];
     my_result.buffer = std::move(data);
@@ -240,6 +295,27 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldParse
 
 }
 
+LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::WidgetSpecDecl* decl) {
+  auto options = IndexOptionSet(filename, rule_name, decl->options, {"spec", "gen_dir", "cc_out", "h_out", "deps"});
+
+  auto src = GetBufferContents(options["spec"]);
+  auto gen_dir = GetStringOption(options["gen_dir"]);
+  auto cc_out = GetStringOption(options["cc_out"]);
+  auto h_out = GetStringOption(options["h_out"]);
+  auto deps = ProcessLibraryBuildResultList(options["deps"]);
+  deps.push_back(parent->default_flags);
+  deps.push_back(parent->GetRule("src/gui", "widget_helper"));
+
+  DoMkdir(ast_ctx().strdup(gen_dir));
+
+  EmitStream h_stream;
+  EmitStream cc_stream;
+  widget_spec::EmitWidgetSpec(ast_ctx(), src, h_stream.stream(), cc_stream.stream());
+  cc_stream.write(gen_dir + "/" + cc_out);
+  h_stream.write(gen_dir + "/" + h_out);
+
+  return SimpleCompileCXXFile(ast_ctx(), deps, gen_dir, {cc_out}); 
+}
 LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::BufferLoweringSpecDecl* decl) {
   auto options = IndexOptionSet(filename, rule_name, decl->options, {"src", "gen_dir", "cc_out"});
 
@@ -265,7 +341,24 @@ LibraryBuildResult* FileContext::Eval(string_view rule_name, rule_spec::OldLower
   return ast_ctx().New<LibraryBuildResult>(); 
 }
 LibraryBuildResult* FileContext::Eval(string_view name, rule_spec::LibraryDecl* decl) {
-  auto options = IndexOptionSet(filename, name, decl->options, {"deps", "srcs", "hdrs"});
+  auto options = IndexOptionSet(filename, name, decl->options, {"deps", "srcs", "hdrs", "gen_dir"});
+  if (options["gen_dir"]) {
+    auto gen_dir = GetStringOption(options["gen_dir"]);
+
+    DoMkdir(ast_ctx().strdup(gen_dir));
+
+    auto srcs = BufferContentsArgList(options["srcs"], gen_dir);
+    BufferContentsArgList(options["hdrs"], gen_dir);
+
+    std::vector<string_view> srcs_copy;
+    for (auto& src : srcs) {
+      srcs_copy.push_back(src);
+    }
+    auto deps = ProcessLibraryBuildResultList(options["deps"]);
+    deps.push_back(parent->default_flags);
+    deps.push_back(parent->default_buffer_flags);
+    return SimpleCompileCXXFile(ast_ctx(), deps, gen_dir, srcs_copy); 
+  }
   auto srcs = StringArgList(options["srcs"]);
   StringArgList(options["hdrs"]);
   std::vector<string_view> srcs_copy;

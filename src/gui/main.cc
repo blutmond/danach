@@ -8,7 +8,13 @@ struct Trampoline {
 };
 
 int main(int argc, char **argv) {
-  const char* filename = ".build/ide-dynamic.so";
+  if (argc <= 1) {
+    fprintf(stderr, "too few arguments; need command to run.\n");
+    exit(EXIT_FAILURE);
+  }
+  const char* filename = argv[1];
+  argv++;
+  argc--;
   void* handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
   if (!handle) { fprintf(stderr, "dlopen(%s): %s\n", filename, dlerror()); exit(EXIT_FAILURE); }
 

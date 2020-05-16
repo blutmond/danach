@@ -23,6 +23,5 @@ int main(int argc, char **argv) {
     EmitCompilerTrace("tools/bootstrapping.sh");
   }
 
-
   fprintf(stderr, "\e[32mSuccess!\e[m\n");
 }

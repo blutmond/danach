@@ -38,7 +38,9 @@ LibraryBuildResult *SimpleCompileCXXFile(ASTContext& ast_ctx, const std::vector<
 
 void BuildLinkCommand(LinkCommand* cmd);
 
+LibraryBuildResult *MakeBaseFlags(ASTContext& ast_ctx);
 LibraryBuildResult *MakeDefaultFlags(ASTContext& ast_ctx);
+LibraryBuildResult *MakeDefaultBufferFlags(ASTContext& ast_ctx);
 LibraryBuildResult *MakeSoFlags(ASTContext& ast_ctx);
 LibraryBuildResult *MakeGtkFlags(ASTContext& ast_ctx);
 LibraryBuildResult *MakeDLFlags(ASTContext& ast_ctx);

@@ -54,6 +54,7 @@ lib rule_invoker {
   deps = [string_utils, compiler,
           parser.parser_lowering,
           parser.lowering_spec_lowering,
+          gui.widget_spec_lowering,
           rule_spec, gui.emit_buffer];
 }
 
@@ -63,3 +64,7 @@ lib tool {
 }
 
 link "rules-dynamic" { deps = [tool]; }
+
+import 13 of ".gui/data" as gui_data;
+
+link "run-buffer-tests" { deps = [gui_data.self_builder]; }

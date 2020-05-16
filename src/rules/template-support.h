@@ -8,6 +8,11 @@ class EmitStream {
  public:
   std::ostream& stream() { return ss; }
 
+  std::string get() {
+    ss.flush();
+    return ss.str();
+  }
+
   void write(const std::string& fname) {
     ss.flush();
     std::ofstream ofs(fname, std::ofstream::out | std::ofstream::trunc);

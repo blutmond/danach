@@ -19,7 +19,7 @@ struct Decoration {
   bool toplevel = true;
 };
 
-struct ChunkView {
+struct ChunkViewState {
   std::string title;
 
   BufferPos cursor {0, 0};
@@ -27,12 +27,16 @@ struct ChunkView {
   size_t float_pos = string_view::npos;
   double scroll = 0.0;
 
-  std::vector<Buffer*> buffers;
-  std::vector<Decoration> decorations;
-  std::vector<size_t> gaps;
+  virtual ~ChunkViewState() {}
+  virtual Buffer* GetBuffer(size_t buffer_id) = 0;
+  virtual size_t num_buffers() = 0;
+
+  virtual void Draw(gui::DrawCtx& cr, size_t window_height, size_t window_width) = 0;
+  virtual bool FindChunkViewPos(gui::Point pt, size_t& buffer_id_, BufferPos& cursor) = 0;
 
   void SanitizeCursor() {
-    const auto& lines = buffers[buffer_id_]->lines;
+    if (buffer_id_ == 0 && num_buffers() == 0) return;
+    const auto& lines = GetBuffer(buffer_id_)->lines;
     if (cursor.row >= lines.size()) {
       cursor.row = lines.size() - 1;
     }
@@ -42,6 +46,25 @@ struct ChunkView {
   }
 };
 
-bool DoKeyPress(ChunkView& view, uint32_t keyval);
+bool DoKeyPress(ChunkViewState& view, uint32_t keyval);
+bool DoEscapeKeyPress(ChunkViewState& view, uint32_t keyval);
 
+struct ChunkView;
 void DrawView(gui::DrawCtx& cr, const ChunkView& view, size_t window_height, size_t window_width);
+
+struct ChunkView : public ChunkViewState {
+  std::vector<Buffer*> buffers;
+  std::vector<Decoration> decorations;
+  std::vector<size_t> gaps;
+
+  Buffer* GetBuffer(size_t buffer_id) override { return buffers[buffer_id]; }
+  size_t num_buffers() override { return buffers.size(); }
+
+  void Draw(gui::DrawCtx& cr, size_t window_height, size_t window_width) override {
+    DrawView(cr, *this, window_height, window_width);
+  }
+
+  bool FindChunkViewPos(gui::Point pt, size_t& buffer_id_, BufferPos& cursor) override;
+};
+
+bool FindPos(gui::Point& st, gui::Point pt, gui::FontLayoutFace* font, BufferPos& cursor, const Buffer& buffer);

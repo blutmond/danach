@@ -156,6 +156,19 @@ LibraryBuildResult *MakeDefaultFlags(ASTContext& ast_ctx) {
   return res;
 }
 
+LibraryBuildResult *MakeBaseFlags(ASTContext& ast_ctx) {
+  auto* res = ast_ctx.New<LibraryBuildResult>();
+  res->link_flags = {"-lstdc++"};
+  res->cxx_flags = {"-fpic", "-I", "."};
+  return res;
+}
+
+LibraryBuildResult *MakeDefaultBufferFlags(ASTContext& ast_ctx) {
+  auto* res = ast_ctx.New<LibraryBuildResult>();
+  res->cxx_flags = {"-I", ".generated/src"};
+  return res;
+}
+
 LibraryBuildResult *MakeSoFlags(ASTContext& ast_ctx) {
   auto* res = ast_ctx.New<LibraryBuildResult>();
   res->link_flags = {"-shared", "-Wl,-z,defs", "-Wl,-rpath='$ORIGIN'"};

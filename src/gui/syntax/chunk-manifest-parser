@@ -1,0 +1,19 @@
+module chunk_manifest;
+
+entry Module;
+tokenizer basic;
+
+production Dep {
+  pattern H { "h" ":" %name = identifier }
+  pattern CC { %name = identifier }
+}
+
+production Decl {
+  pattern Binary { "cc_binary" %fname = str ";" }
+  pattern Deps { "deps" %deps = comma_array(comma) { Dep } ";" }
+  pattern Name { "name" %name = identifier ";" }
+}
+
+define Module {
+  %decls = concat { Decl }
+}

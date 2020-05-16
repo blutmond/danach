@@ -1,5 +1,6 @@
 import "src/rules" as rules;
 import "src/parser" as parser;
+import 2 of ".gui/gui-gen" as gui_gen;
 
 lib core_gtk_utils {
   srcs = ["font-face.cc"];
@@ -63,6 +64,13 @@ lib so_handle {
   deps = [dl];
 }
 
+old_parser chunk_manifest {
+  parser = "syntax/chunk-manifest-parser";
+  tokens = "syntax/chunk-manifest-tokenizer";
+  cc_out = "chunk-manifest.cc";
+  h_out = "chunk-manifest.h";
+}
+
 lib dlmain {
   srcs = ["dlmain.cc"];
   deps = [gtk, rules.process, rules.clang_error_parse, core_gtk_utils, view_manifest,
@@ -71,9 +79,38 @@ lib dlmain {
 
 solink "ide-dynamic.so" { deps = [dlmain]; }
 
+lib graphdraw {
+  srcs = ["graph-draw.cc"];
+  deps = [gtk, core_gtk_utils, so_handoff];
+}
+
+lib editor_widget {
+  srcs = ["editor-widget.cc", "editor-widget-build.cc"];
+  hdrs = ["editor-widget.h"];
+  deps = [gtk, core_gtk_utils, view_manifest, rules.compiler, chunk_manifest,
+          rules.string_utils,
+          parser.tokenizer_helper, buffer, buffer_edit, buffer_view];
+}
+
+solink "ide-graph.so" { deps = [graphdraw]; }
+
 lib main {
   srcs = ["main.cc"];
   deps = [dl];
 }
 
+lib widget_helper {
+  srcs = ["widget-helper.cc"];
+  hdrs = ["widget-helper.h"];
+  deps = [core_gtk_utils];
+}
+
 link "gui" { deps = [main]; }
+
+lib widget_spec_lowering {
+  srcs = ["widget-spec-lowering.cc"];
+  hdrs = ["widget-spec-lowering.h"];
+  deps = [parser.tokenizer_helper, gui_gen.widgets_spec];
+}
+
+link "widget-example" { deps = [gui_gen.example_widget]; }
