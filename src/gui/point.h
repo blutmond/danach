@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 namespace gui {
 
 struct Point {
@@ -33,6 +35,9 @@ struct Point {
 
   double self_dot() const {
     return x * x + y * y;
+  }
+  Point Floor() {
+    return {std::floor(x), std::floor(y)};
   }
 };
 

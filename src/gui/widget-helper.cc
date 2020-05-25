@@ -33,6 +33,50 @@ void BasicWindowState::redraw() {
   }
 }
 
+void BasicWindowState::toggle_fullscreen() {
+  if (!is_fullscreen_) {
+    gtk_window_fullscreen(GTK_WINDOW(window));
+  } else {
+    gtk_window_unfullscreen(GTK_WINDOW(window));
+  }
+  is_fullscreen_ = !is_fullscreen_;
+}
+
+void BasicWindowState::UngrabSeat() {
+  if (seat) {
+    gdk_seat_ungrab(seat);
+    seat = nullptr;
+  }
+}
+void BasicWindowState::GrabSeat() {
+  GdkDisplay *display = gdk_display_get_default();
+  GdkGrabStatus status;
+  seat = gdk_display_get_default_seat (display);
+  status = gdk_seat_grab (seat,
+                          gtk_widget_get_window (window),
+                          GDK_SEAT_CAPABILITY_ALL, TRUE,
+                                                    NULL, NULL, NULL, NULL);
+  if (status != GDK_GRAB_SUCCESS) {
+    fprintf(stderr, "failed to grab seat\n");
+  }
+}
+
+bool BasicWindowState::HandleSpecialEvents(GdkEventKey* event) {
+  if (event->keyval == GDK_KEY_F11) {
+    toggle_fullscreen();
+    return true;
+  }
+  if (event->keyval == GDK_KEY_F12) {
+    if (seat) {
+      UngrabSeat();
+    } else {
+      GrabSeat();
+    }
+    return true;
+  }
+  return false;
+}
+
 namespace gui {
 void DoHSplit(Rectangle input, Rectangle& out1, Rectangle& out2, int split_point) {
   split_point = std::min(std::max(0, split_point), input.shape.w);

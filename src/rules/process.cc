@@ -51,6 +51,11 @@ int WaitFor(pid_t cpid) {
 
 void WaitForAssert(pid_t cpid) { AssertWStatus(WaitFor(cpid)); }
 
+int RunWithStatus(std::vector<const char*> argv) {
+  argv.push_back(nullptr);
+  return WaitFor(RunPid(argv.data()));
+}
+
 void Run(const char *argv[]) {
   /*
   for (int i = 0;argv[i]; ++i) {

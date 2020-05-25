@@ -12,6 +12,7 @@ namespace gui {
 struct Shape {
   int w;
   int h;
+  Point AsPoint() const { return {double(w), double(h)}; }
 };
 
 struct Rectangle {
@@ -19,9 +20,15 @@ struct Rectangle {
   Shape shape;
 };
 
+inline bool TestInside(gui::Rectangle rect, gui::Point pt_orig) {
+  gui::Point pt = pt_orig - rect.st;
+  gui::Point shape = rect.shape.AsPoint();
+  return (pt.x >= 0 && pt.y >= 0 && pt.x < shape.x && pt.y < shape.y);
+}
+
 inline bool TestRectangleInside(double& x, double& y, gui::Rectangle rect) {
   gui::Point pt = gui::Point{x, y} - rect.st;
-  if (pt.x > 0 && pt.y > 0 && pt.x < double(rect.shape.w) && pt.y < double(rect.shape.h)) {
+  if (pt.x >= 0 && pt.y >= 0 && pt.x < double(rect.shape.w) && pt.y < double(rect.shape.h)) {
     x -= rect.st.x;
     y -= rect.st.y;
     return true;
@@ -53,8 +60,16 @@ struct BasicWindowState {
   std::vector<std::pair<GtkWidget*, gulong>> events;
   void SigConnect(GtkWidget* object, const char* name, GCallback callback, void* data);
 
+  
+  bool is_fullscreen_ = false;
   bool needs_redraw = true;
   void redraw();
+  void GrabSeat();
+  void UngrabSeat();
+  GdkSeat *seat = nullptr;
+  void toggle_fullscreen();
+
+  bool HandleSpecialEvents(GdkEventKey* event);
 };
 
 inline void SaveClipTranslate(gui::DrawCtx& cr, gui::Point st, gui::Point width) {

@@ -55,19 +55,21 @@ void Delete(Buffer& buffer, BufferPos s_pos, BufferPos e_pos) {
   // buffer.lines.
 }
 
-void Init(Buffer& buffer, string_view text) {
+Buffer::Buffer(string_view text) {
   auto cursor = text;
-  Buffer tmp;
-  tmp.lines.clear();
+  lines.clear();
   while (!cursor.empty()) {
     auto s = cursor.find('\n');
     auto a = cursor.substr(0, s);
-    tmp.lines.push_back(std::string(a));
+    lines.push_back(std::string(a));
     cursor.remove_prefix(a.size());
     if (s != string_view::npos) cursor.remove_prefix(1);
   }
-  if (tmp.lines.empty()) tmp.lines.push_back("");
-  buffer = tmp;
+  if (lines.empty()) lines.push_back("");
+}
+
+void Init(Buffer& buffer, string_view text) {
+  buffer = Buffer(text);
 }
 
 void SaveFile(std::ostream& ss, const std::vector<IdBuffer>& buffers) {

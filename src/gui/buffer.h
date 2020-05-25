@@ -21,6 +21,9 @@ struct BufferRange {
 struct Buffer {
   std::vector<std::string> lines{{""}};
 
+  Buffer() {}
+  Buffer(string_view text);
+
   bool operator==(const Buffer& other) const {
     return lines == other.lines;
   }

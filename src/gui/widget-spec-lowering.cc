@@ -105,7 +105,9 @@ class Window : public BasicWindowState {
 
   EmitEventHandlerHeader(cc_stream, {"window", "key-press-event", "GdkEventKey*", "event"});
   cc_stream << R"(
-    if (state->example.s2.KeyPress(event)) {
+    if (state->HandleSpecialEvents(event)) {
+      state->redraw();
+    } else if (state->example.s2.KeyPress(event)) {
       state->redraw();
     }
 )";

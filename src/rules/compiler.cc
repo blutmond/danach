@@ -151,14 +151,14 @@ void BuildLinkCommand(LinkCommand* cmd) {
 
 LibraryBuildResult *MakeDefaultFlags(ASTContext& ast_ctx) {
   auto* res = ast_ctx.New<LibraryBuildResult>();
-  res->link_flags = {"-lstdc++"};
+  res->link_flags = {"-lstdc++", "-lm"};
   res->cxx_flags = {"-fpic", "-I", ".generated/", "-I", "src", "-I", ".build/"};
   return res;
 }
 
 LibraryBuildResult *MakeBaseFlags(ASTContext& ast_ctx) {
   auto* res = ast_ctx.New<LibraryBuildResult>();
-  res->link_flags = {"-lstdc++"};
+  res->link_flags = {"-lstdc++", "-lm"};
   res->cxx_flags = {"-fpic", "-I", "."};
   return res;
 }
