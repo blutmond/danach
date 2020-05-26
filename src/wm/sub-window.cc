@@ -1,7 +1,13 @@
 #include "wm/sub-window.h"
+#include "gui/so-handle.h"
+#include "gui/so-handoff-lib.h"
+#include "wm/cross-process-transfer.h"
+#include "parser/ast-context.h"
 
 #include <iostream>
 #include <stdlib.h>
+
+ADD_TRANSFER_TYPE(SubWindow, 3);
 
 void DrawDecorations(gui::DrawCtx& cr, gui::Rectangle pos) {
   cr.set_source_rgb(1.0, 1.0, 1.0);
@@ -147,6 +153,16 @@ class WindowState : public BasicWindowState {
     InitEvents();
     cursors.Init(gtk_widget_get_display(window));
   }
+  WindowState(GtkWidget* window, GtkWidget* drawing_area, size_t window_width, size_t window_height, bool is_fullscreen_, GdkSeat *seat) {
+    this->window = window;
+    this->drawing_area = drawing_area;
+    this->window_width_ = window_width;
+    this->window_height_ = window_height;
+    this->is_fullscreen_ = is_fullscreen_;
+    this->seat = seat;
+    InitEvents();
+    cursors.Init(gtk_widget_get_display(window));
+  }
   gui::Point last_hover_pt;
   size_t GetHoverPt() {
     auto pt = last_hover_pt;
@@ -220,6 +236,36 @@ class WindowState : public BasicWindowState {
 
   void AddWindow(std::unique_ptr<SubWindow> window) {
     windows.insert(windows.begin(), std::move(window));
+  }
+
+  void DoActualHandoff() {
+    fprintf(stderr, "[so-reloader] ?? doing load number: %zu\n", main::GetJumpId());
+    const char* so_name = (main::GetJumpId() % 2) == 0 ? "/tmp/gui-so-red.so" : "/tmp/gui-so-black.so";
+    const char* base_so_name = ".build/ide-wm.so";
+    fprintf(stderr, "[so-reloader] Loading from: %s\n", so_name);
+
+    link(base_so_name, so_name);
+    SoHandle handle(so_name, RTLD_NOW | RTLD_LOCAL);
+    unlink(so_name);
+
+    BufferContext ctx;
+    std::vector<OpaqueTransferRef> items;
+    for (auto& window : windows) items.push_back(window->encode(ctx));
+
+    handle.get_sym<void(GtkWidget*,GtkWidget*,size_t,size_t, bool, GdkSeat*, const std::vector<OpaqueTransferRef>&
+                        )>("gtk_transfer_window")(window, drawing_area,
+                                              window_width_, window_height_, is_fullscreen_, seat, items);
+    main::SwapToNewSoFile(std::move(handle));
+  }
+
+  void RefreshBinary() {
+    g_idle_add((GSourceFunc)((+[](WindowState* state) {
+      state->redraw();
+      state->DeregisterEvents();
+      state->DoActualHandoff();
+      delete state;
+      return FALSE;
+    })), this);
   }
 
   void InitEvents() {
@@ -370,7 +416,68 @@ void SubWindow::redraw() {
   wm->redraw();
 }
 
+void SubWindow::RefreshBinary() {
+  wm->RefreshBinary();
+}
+
+extern "C" void gtk_transfer_window(GtkWidget* window, GtkWidget* drawing_area,
+                                    size_t width, size_t height, bool is_fullscreen, GdkSeat* seat,
+                                    const std::vector<OpaqueTransferRef>& items) {
+  auto* window2 = new WindowState(window, drawing_area, width, height, is_fullscreen, seat);
+
+  for (auto& t : items) {
+    auto tmp = t.Load<SubWindow>();
+    if (tmp) {
+      tmp->wm = window2;
+      window2->windows.push_back(std::move(tmp));
+    }
+  }
+}
+
+struct SillyBase {
+  virtual const char* name() const = 0;
+  virtual ~SillyBase() {}
+  virtual void doThing() const = 0;
+
+  virtual OpaqueTransferRef encode(BufferContext& context) = 0;
+};
+
+struct SillyTypeContext {
+  int silly;
+};
+
+struct SillyType : public SillyBase {
+  explicit SillyType(int i) : i_(i) {} 
+  explicit SillyType(const SillyTypeContext& ctx) : i_(ctx.silly) {}
+  ~SillyType() override {}
+  const char* name() const override { return "SillyType"; }
+  void doThing() const override { printf("Silly: %d\n", i_); }
+
+  OpaqueTransferRef encode(BufferContext& context) override;
+
+  int i_;
+};
+
+ADD_TRANSFER_TYPE(SillyBase, 0);
+ADD_TRANSFER_TYPE(SillyType, 1);
+ADD_SUBCLASS(SillyType, SillyBase);
+ADD_BASIC_DECODER(SillyTypeContext, SillyType, 0);
+
+OpaqueTransferRef SillyType::encode(BufferContext& context) {
+  return context.encode(SillyTypeContext{i_});
+}
+
 extern "C" void dl_plugin_entry(int argc, char **argv) {
+  /*
+  auto* silly = new SillyType(10);
+  BufferContext ctx;
+  auto tmp = silly->encode(ctx);
+
+  delete silly;
+  tmp.Load<SillyType>()->doThing();
+
+  exit(0);
+  */
   if (argc > 1) {
     fprintf(stderr, "calling(%s): %s\n", argv[0], argv[1]);
     new WindowState(); // argv[1]);

@@ -42,8 +42,25 @@ bool LineEdit(uint32_t keyval, std::string& line, size_t& cursor) {
   return true;
 }
 
+struct BasicEditorWindowContext {
+  gui::Rectangle shape;
+  std::string filename;
+  std::string buffer_contents;
+};
+
 class BasicEditorWindow : public SubWindow {
  public:
+  BasicEditorWindow(const BasicEditorWindowContext& context) {
+    decorated_rect = context.shape;
+    filename = context.filename;
+    buffer = Buffer(context.buffer_contents);
+    view.buffers.push_back(&buffer);
+    view.decorations.push_back(Decoration());
+  }
+  OpaqueTransferRef encode(BufferContext& context) const override {
+    fprintf(stderr, "\n\nEncoding things...\n\n\n");
+    return context.encode(BasicEditorWindowContext{decorated_rect, filename, Collapse(buffer)});
+  }
   BasicEditorWindow() {
     view.buffers.push_back(&buffer);
     view.decorations.push_back(Decoration());
@@ -166,6 +183,13 @@ class BasicEditorWindow : public SubWindow {
           EmitStream out;
           out.stream() << Collapse(buffer);
           out.write(filename);
+        } else if (colon_text.size() > 2 && colon_text.substr(0, 2) == "w ") {
+          string_view data = colon_text;
+          data.remove_prefix(2);
+          filename = std::string(data); 
+          EmitStream out;
+          out.stream() << Collapse(buffer);
+          out.write(filename);
         } else if (colon_text.size() > 5 && colon_text.substr(0, 5) == "open ") {
           string_view data = colon_text;
           data.remove_prefix(5);
@@ -249,6 +273,10 @@ class BasicEditorWindow : public SubWindow {
   size_t col_col = 0;
 };
 
+ADD_TRANSFER_TYPE(BasicEditorWindow, 6);
+ADD_SUBCLASS(SubWindow, BasicEditorWindow);
+ADD_BASIC_DECODER(BasicEditorWindowContext, BasicEditorWindow, 2);
+
 size_t GetErrorRenderHeight(clang_util::ErrorMessage* error_ptr) {
   using namespace clang_util;
   switch (error_ptr->getKind()) {
@@ -300,8 +328,24 @@ void DrawErrors(gui::DrawCtx& cr, gui::Point& cursor, clang_util::ErrorMessage* 
   }
 }
 
+struct F5RebuildWindowContext {
+  gui::Rectangle shape;
+  std::string prev_errors;
+  std::string output;
+  int wstatus = 0;
+};
+
 class F5RebuildWindow : public SubWindow {
  public:
+  F5RebuildWindow() {}
+  explicit F5RebuildWindow(const F5RebuildWindowContext& context) {
+    decorated_rect = context.shape;
+    prev_errors = context.prev_errors;
+    errors = clang_util::ParseErrorMessages(prev_errors);
+    output = context.output;
+    wstatus = context.wstatus;
+  }
+  std::string prev_errors;
   std::vector<std::unique_ptr<clang_util::ErrorMessage>> errors;
   std::string output;
   int wstatus = 0;
@@ -335,16 +379,29 @@ class F5RebuildWindow : public SubWindow {
                                 "-fdiagnostics-print-source-range-info", "/tmp/toy.cc",
                                 "-o", "/tmp/silly"
                                 }, &out, &out);
+      prev_errors = out;
       errors = clang_util::ParseErrorMessages(out);
       if (wstatus == 0) {
         std::string out2;
         RunWithPipe({"/tmp/silly"}, &out2, &out2);
         output = std::move(out2);
+        int status = system(".build/rules src/wm ide-wm.so");
+        if (status == 0) {
+          RefreshBinary();
+        }
       }
       redraw();
     }
   }
+
+  OpaqueTransferRef encode(BufferContext& context) const override {
+    return context.encode(F5RebuildWindowContext{decorated_rect, prev_errors, output, wstatus});
+  }
 };
+
+ADD_TRANSFER_TYPE(F5RebuildWindow, 5);
+ADD_SUBCLASS(SubWindow, F5RebuildWindow);
+ADD_BASIC_DECODER(F5RebuildWindowContext, F5RebuildWindow, 1);
 
 class CommandWindow : public SubWindow {
  public:
@@ -500,7 +557,7 @@ class CommandWindow : public SubWindow {
 
       std::string out;
       std::string out2;
-      int wstatus = RunWithPipe({
+      RunWithPipe({
                                 "/usr/bin/clang-6.0", "-ferror-limit=1000",
                                 "-Wall", // "-fdiagnostics-parseable-fixits",
                                 "-fdiagnostics-print-source-range-info", "/tmp/toy.cc"

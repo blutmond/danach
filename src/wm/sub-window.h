@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gui/widget-helper.h"
+#include "wm/cross-process-transfer.h"
 
 class Dragger {
  public:
@@ -15,6 +16,7 @@ class SubWindow {
   WindowState* wm = nullptr;
   void AddWindow(std::unique_ptr<SubWindow> window);
   void redraw();
+  void RefreshBinary();
   virtual ~SubWindow() {}
 
   virtual void Draw(gui::DrawCtx& cr) {
@@ -31,6 +33,8 @@ class SubWindow {
   gui::Rectangle rect() const;
 
   gui::Rectangle decorated_rect;
+
+  virtual OpaqueTransferRef encode(BufferContext& context) const { return {0, nullptr}; }
 };
 
 gui::Rectangle DefaultRectangle();
