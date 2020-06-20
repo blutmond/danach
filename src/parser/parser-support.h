@@ -12,6 +12,8 @@
 
 using std::experimental::string_view;
 
+bool FileExists(const std::string& filename);
+
 std::string LoadFile(const std::string& filename);
 
 struct LineInfo {

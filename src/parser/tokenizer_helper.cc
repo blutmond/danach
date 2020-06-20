@@ -1,5 +1,10 @@
 #include "parser/parser-support.h"
 
+bool FileExists(const std::string& filename) {
+  std::ifstream in(filename, std::ios::in | std::ios::binary);
+  return !!in;
+}
+
 std::string LoadFile(const std::string& filename) {
   std::ifstream in(filename, std::ios::in | std::ios::binary);
   if (!in) {

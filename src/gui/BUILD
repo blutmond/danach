@@ -92,6 +92,12 @@ lib editor_widget {
           parser.tokenizer_helper, buffer, buffer_edit, buffer_view];
 }
 
+lib escape_commands {
+  srcs = ["escape-commands.cc"];
+  hdrs = ["escape-commands.h"];
+  deps = [buffer, buffer_edit];
+}
+
 solink "ide-graph.so" { deps = [graphdraw]; }
 
 lib main {

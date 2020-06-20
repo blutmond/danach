@@ -6,24 +6,9 @@
 #include "rules/process.h"
 #include "rules/template-support.h"
 #include "rules/clang-error-parse.h"
+#include "gui/escape-commands.h"
 #include <iostream>
 #include <stdlib.h>
-#include <exception>
-
-struct NoMoreKeyvalException : public std::exception {
-  const char * what () const throw () {
-    return "No more keyval. (This is not an error)";
-  }
-};
-
-struct KeyFeed {
-  uint32_t Next() {
-    if (i < command_history.size()) return command_history[i++];
-    throw NoMoreKeyvalException();
-  }
-  std::vector<uint32_t>& command_history;
-  size_t i = 0;
-};
 
 bool LineEdit(uint32_t keyval, std::string& line, size_t& cursor) {
   if (keyval >= ' ' && keyval <= '~') {
@@ -46,20 +31,26 @@ struct BasicEditorWindowContext {
   gui::Rectangle shape;
   std::string filename;
   std::string buffer_contents;
+  BufferPos cursor;
+  double scroll;
 };
 
 class BasicEditorWindow : public SubWindow {
  public:
   BasicEditorWindow(const BasicEditorWindowContext& context) {
+    AddDefaultCommands(commands);
     decorated_rect = context.shape;
     filename = context.filename;
     buffer = Buffer(context.buffer_contents);
     view.buffers.push_back(&buffer);
     view.decorations.push_back(Decoration());
+    view.scroll = context.scroll;
+    view.cursor = context.cursor;
   }
   OpaqueTransferRef encode(BufferContext& context) const override {
     fprintf(stderr, "\n\nEncoding things...\n\n\n");
-    return context.encode(BasicEditorWindowContext{decorated_rect, filename, Collapse(buffer)});
+    return context.encode(BasicEditorWindowContext{decorated_rect, filename,
+                        Collapse(buffer), view.cursor, view.scroll});
   }
   BasicEditorWindow() {
     view.buffers.push_back(&buffer);
@@ -120,12 +111,6 @@ class BasicEditorWindow : public SubWindow {
     auto& buffer = *view.GetBuffer(view.buffer_id_);
     auto& cursor = view.cursor;
     if (DoEscapeKeyPress(view, keyval)) {
-    } else if (keyval == 'i') {
-      mode = Mode::INSERT;
-    } else if (keyval == 'o') {
-      mode = Mode::INSERT;
-      cursor.col = buffer.lines[cursor.row].size();
-      Insert(buffer, cursor, '\n');
     } else if (keyval == 'd') {
       keyval = feed.Next();
       if (keyval == 'd') {
@@ -139,6 +124,13 @@ class BasicEditorWindow : public SubWindow {
         }
       } else {
         fprintf(stderr, "unknown keyval (d): %d, %s\n", keyval, gdk_keyval_name(keyval));
+      }
+    } else if (keyval == 'm') {
+      keyval = feed.Next();
+      if (keyval == 'a') {
+        fprintf(stderr, "MarkThing\n");
+      } else {
+        fprintf(stderr, "unknown keyval (m'): %d, %s\n", keyval, gdk_keyval_name(keyval));
       }
     } else {
       fprintf(stderr, "unknown keyval: %d, %s\n", keyval, gdk_keyval_name(keyval));
@@ -162,7 +154,8 @@ class BasicEditorWindow : public SubWindow {
       command_history.push_back(keyval);
       try {
         KeyFeed feed{command_history};
-        bool result = KeyPressEscape(feed);
+        EscapeCommandApply ctx{mode, view.GetBuffer(view.buffer_id_), view.cursor, paste_action};
+        bool result = commands.HandleCommand(ctx, command_history) || KeyPressEscape(feed);
         command_history.clear();
         return result;
       } catch(NoMoreKeyvalException& e) {}
@@ -193,10 +186,16 @@ class BasicEditorWindow : public SubWindow {
         } else if (colon_text.size() > 5 && colon_text.substr(0, 5) == "open ") {
           string_view data = colon_text;
           data.remove_prefix(5);
-          filename = std::string(data); 
-          Init(buffer, LoadFile(filename));
+          filename = std::string(data);
+          if (FileExists(filename)) {
+            Init(buffer, LoadFile(filename));
+          }
         } else if (colon_text == "t") {
           fprintf(stderr, "--------Eval--------\n");
+        } else if (colon_text == "q") {
+          redraw();
+          close();
+          return false;
         } else {
           fprintf(stderr, "Unknown command: %s\n", colon_text.c_str());
         }
@@ -262,11 +261,8 @@ class BasicEditorWindow : public SubWindow {
   Buffer buffer;
   ChunkView view;
 
-  enum class Mode {
-    INSERT,
-    ESCAPE,
-    COLON,
-  };  
+  std::unique_ptr<PasteAction> paste_action;
+  CommandList commands;
   Mode mode = Mode::INSERT;
   std::vector<uint32_t> command_history;
   std::string colon_text;
@@ -333,6 +329,7 @@ struct F5RebuildWindowContext {
   std::string prev_errors;
   std::string output;
   int wstatus = 0;
+  int build_number = 0;
 };
 
 class F5RebuildWindow : public SubWindow {
@@ -344,11 +341,13 @@ class F5RebuildWindow : public SubWindow {
     errors = clang_util::ParseErrorMessages(prev_errors);
     output = context.output;
     wstatus = context.wstatus;
+    build_number = context.build_number;
   }
   std::string prev_errors;
   std::vector<std::unique_ptr<clang_util::ErrorMessage>> errors;
   std::string output;
   int wstatus = 0;
+  int build_number = 0;
   void Draw(gui::DrawCtx& cr) override {
     // Draw Prompt?? // Draw output?? // Scroll??
     cr.set_source_rgb(0.0, 0.0, 0.0);
@@ -361,6 +360,19 @@ class F5RebuildWindow : public SubWindow {
     }
     cr.set_source_rgb(1.0, 1.0, 1.0);
     std::vector<cairo_glyph_t> glyphs_;
+    {
+      font->LayoutWrap(cursor, glyphs_, "build id: ");
+      int base = 1;
+      while (base * 10 <= build_number) base *= 10;
+      while (base > 0) {
+        char data[1] = {static_cast<char>('0' + (build_number / base) % 10)};
+        font->LayoutWrap(cursor, glyphs_, string_view(data, 1));
+        base /= 10;
+      }
+      font->Flush(cr, glyphs_);
+      cursor.x = 2;
+      cursor.y += font->height();
+    }
     for (auto& line : Buffer(output).lines) {
       glyphs_.clear();
       font->LayoutWrap(cursor, glyphs_, line);
@@ -383,10 +395,11 @@ class F5RebuildWindow : public SubWindow {
       errors = clang_util::ParseErrorMessages(out);
       if (wstatus == 0) {
         std::string out2;
-        RunWithPipe({"/tmp/silly"}, &out2, &out2);
+        int status = RunWithPipe({".build/rules", "src/wm", "ide-wm.so"}, &out2, &out2);
         output = std::move(out2);
-        int status = system(".build/rules src/wm ide-wm.so");
+        // status = system(".build/rules src/wm ide-wm.so");
         if (status == 0) {
+          ++build_number;
           RefreshBinary();
         }
       }
@@ -395,13 +408,30 @@ class F5RebuildWindow : public SubWindow {
   }
 
   OpaqueTransferRef encode(BufferContext& context) const override {
-    return context.encode(F5RebuildWindowContext{decorated_rect, prev_errors, output, wstatus});
+    return context.encode(F5RebuildWindowContext{decorated_rect, prev_errors, output, wstatus, build_number});
   }
 };
 
 ADD_TRANSFER_TYPE(F5RebuildWindow, 5);
 ADD_SUBCLASS(SubWindow, F5RebuildWindow);
 ADD_BASIC_DECODER(F5RebuildWindowContext, F5RebuildWindow, 1);
+
+class GuiExploreWindow : public SubWindow {
+ public:
+  void Draw(gui::DrawCtx& cr) override {
+    cr.set_source_rgb(0.0, 0.0, 0.0);
+    cr.paint();
+    cr.set_source_rgb(1.0, 1.0, 0.0);
+    gui::Point cursor{2,2};
+    std::vector<cairo_glyph_t> glyphs_;
+    auto* font = gui::DefaultFont();
+    font->LayoutWrap(cursor, glyphs_, "something");
+    font->Flush(cr, glyphs_);
+    cursor.y += font->height();
+    cursor.x = 2;
+  }
+  
+};
 
 class CommandWindow : public SubWindow {
  public:
@@ -512,8 +542,12 @@ class CommandWindow : public SubWindow {
     size_t keyval = event->keyval;
     if (LineEdit(keyval, command, cursor)) {
     } else if (keyval == GDK_KEY_Return) {
-      auto cmd_result = 
-          RunCommand(command);
+      if (string_view(command) == "quit") {
+        redraw();
+        close();
+        return;
+      }
+      auto cmd_result = RunCommand(command);
       if (cmd_result) {
         cmd_result->window = this;
         auto frozen_command = std::make_unique<FrozenCommandEntry>();
@@ -531,25 +565,33 @@ class CommandWindow : public SubWindow {
     }
     redraw();
   }
+  std::unique_ptr<CommandItem> RunLs(const std::string& dir) {
+    auto result = std::make_unique<LsResult>();
+    DIR *dp;
+    struct dirent *ep;
+    dp = opendir(dir.c_str());
+
+    if (dp != NULL) {
+      while ((ep = readdir (dp)))
+        result->items.emplace_back(ep->d_name);
+
+      (void) closedir (dp);
+    } else {}
+    return result;
+  }
   std::unique_ptr<CommandItem> RunCommand(string_view command) {
     if (command == "ls" || command == "l") {
-      auto result = std::make_unique<LsResult>();
-      DIR *dp;
-      struct dirent *ep;
-      dp = opendir(cwd().c_str());
-
-      if (dp != NULL) {
-        while ((ep = readdir (dp)))
-          result->items.emplace_back(ep->d_name);
-
-        (void) closedir (dp);
-      }
-      else {
-
-      }
-      return result;
+      return RunLs(cwd());
+    } else if (command.size() >= 4 && command.substr(0, 3) == "ls ") {
+      return RunLs(cwd() + "/" + std::string(command.substr(3)));
+    } else if (command.size() >= 3 && command.substr(0, 2) == "l ") {
+      return RunLs(cwd() + "/" + std::string(command.substr(2)));
     } else if (command == "edit") {
       auto window = std::make_unique<BasicEditorWindow>();
+      window->decorated_rect = DefaultRectangle();
+      AddWindow(std::move(window));
+    } else if (command == "explore") {
+      auto window = std::make_unique<GuiExploreWindow>();
       window->decorated_rect = DefaultRectangle();
       AddWindow(std::move(window));
     } else if (command == "build") {

@@ -144,6 +144,7 @@ class WindowState : public BasicWindowState {
 
   std::vector<std::unique_ptr<SubWindow>> windows;
   std::unique_ptr<Dragger> dragger;
+  bool tab_overlay_visible = false;
   
   void set_cursor(GdkCursor* cursor) {
     gdk_window_set_cursor(gtk_widget_get_window(window), cursor);
@@ -215,6 +216,9 @@ class WindowState : public BasicWindowState {
       } else if (event->keyval == 'f') {
         UngrabSeat();
         system("xdotool set_desktop 3");
+        return true;
+      } else if (event->keyval == 't') {
+        tab_overlay_visible = !tab_overlay_visible;
         return true;
       }
     }
@@ -290,6 +294,14 @@ class WindowState : public BasicWindowState {
       window->Draw(cr);
       cr.restore();
     }
+    if (state->tab_overlay_visible) {
+      gui::Rectangle rect{{0,0}, {800, 800}};
+      SaveClipTranslate(cr, rect);
+      cr.set_source_rgb(0.0, 0.2, 0.2);
+      cr.paint();
+      // state->DrawTabOverlay(cr);
+      cr.restore();
+    }
 
     state->needs_redraw = false;
 
@@ -305,15 +317,15 @@ class WindowState : public BasicWindowState {
 
       size_t num_windows = state->windows.size();
       for (size_t i = 0; i < num_windows; ++i) {
-        auto& window = state->windows[i];
+        auto* window = state->windows[i].get();
         gui::Rectangle rect = window->decorated_rect;
         if (gui::TestInside(rect, pt)) {
           size_t dir;
           if (GetResizeHover(rect, pt, dir)) {
-            state->dragger.reset(new ResizeDragger(window.get(), dir, pt));
+            state->dragger.reset(new ResizeDragger(window, dir, pt));
             break;
           } else if (pt.y < rect.st.y + 25) {
-            state->dragger.reset(new WindowDragger(window.get(), pt));
+            state->dragger.reset(new WindowDragger(window, pt));
             state->set_cursor(state->cursors.grabbing.get());
             break;
           }
@@ -420,6 +432,14 @@ void SubWindow::RefreshBinary() {
   wm->RefreshBinary();
 }
 
+void SubWindow::close() {
+  for (size_t i = 0; i < wm->windows.size(); ++i) {
+    if (wm->windows[i].get() == this) {
+      wm->windows.erase(wm->windows.begin() + i);
+    }
+  }
+}
+
 extern "C" void gtk_transfer_window(GtkWidget* window, GtkWidget* drawing_area,
                                     size_t width, size_t height, bool is_fullscreen, GdkSeat* seat,
                                     const std::vector<OpaqueTransferRef>& items) {
@@ -434,50 +454,7 @@ extern "C" void gtk_transfer_window(GtkWidget* window, GtkWidget* drawing_area,
   }
 }
 
-struct SillyBase {
-  virtual const char* name() const = 0;
-  virtual ~SillyBase() {}
-  virtual void doThing() const = 0;
-
-  virtual OpaqueTransferRef encode(BufferContext& context) = 0;
-};
-
-struct SillyTypeContext {
-  int silly;
-};
-
-struct SillyType : public SillyBase {
-  explicit SillyType(int i) : i_(i) {} 
-  explicit SillyType(const SillyTypeContext& ctx) : i_(ctx.silly) {}
-  ~SillyType() override {}
-  const char* name() const override { return "SillyType"; }
-  void doThing() const override { printf("Silly: %d\n", i_); }
-
-  OpaqueTransferRef encode(BufferContext& context) override;
-
-  int i_;
-};
-
-ADD_TRANSFER_TYPE(SillyBase, 0);
-ADD_TRANSFER_TYPE(SillyType, 1);
-ADD_SUBCLASS(SillyType, SillyBase);
-ADD_BASIC_DECODER(SillyTypeContext, SillyType, 0);
-
-OpaqueTransferRef SillyType::encode(BufferContext& context) {
-  return context.encode(SillyTypeContext{i_});
-}
-
 extern "C" void dl_plugin_entry(int argc, char **argv) {
-  /*
-  auto* silly = new SillyType(10);
-  BufferContext ctx;
-  auto tmp = silly->encode(ctx);
-
-  delete silly;
-  tmp.Load<SillyType>()->doThing();
-
-  exit(0);
-  */
   if (argc > 1) {
     fprintf(stderr, "calling(%s): %s\n", argv[0], argv[1]);
     new WindowState(); // argv[1]);

@@ -18,6 +18,7 @@ lib dlmain {
   srcs = ["dlmain.cc"];
   deps = [gtk, gui.so_handoff, gui.widget_helper, sub_window,
           gui.buffer_edit, gui.buffer_view, rules.clang_error_parse,
+          gui.escape_commands,
           rules.process, cross_process_transfer];
 }
 

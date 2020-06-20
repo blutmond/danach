@@ -16,6 +16,7 @@ class SubWindow {
   WindowState* wm = nullptr;
   void AddWindow(std::unique_ptr<SubWindow> window);
   void redraw();
+  void close();
   void RefreshBinary();
   virtual ~SubWindow() {}
 
