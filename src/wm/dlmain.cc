@@ -53,6 +53,7 @@ class BasicEditorWindow : public SubWindow {
                         Collapse(buffer), view.cursor, view.scroll});
   }
   BasicEditorWindow() {
+    AddDefaultCommands(commands);
     view.buffers.push_back(&buffer);
     view.decorations.push_back(Decoration());
   }
@@ -186,10 +187,7 @@ class BasicEditorWindow : public SubWindow {
         } else if (colon_text.size() > 5 && colon_text.substr(0, 5) == "open ") {
           string_view data = colon_text;
           data.remove_prefix(5);
-          filename = std::string(data);
-          if (FileExists(filename)) {
-            Init(buffer, LoadFile(filename));
-          }
+          SetFilename(std::string(data));
         } else if (colon_text == "t") {
           fprintf(stderr, "--------Eval--------\n");
         } else if (colon_text == "q") {
@@ -210,6 +208,13 @@ class BasicEditorWindow : public SubWindow {
     } else {
       fprintf(stderr, "unknown mode and keyval: %d, %s\n", keyval, gdk_keyval_name(keyval));
       return false;
+    }
+  }
+
+  void SetFilename(std::string new_filename) {
+    filename = new_filename;
+    if (FileExists(filename)) {
+      Init(buffer, LoadFile(filename));
     }
   }
 
@@ -586,6 +591,11 @@ class CommandWindow : public SubWindow {
       return RunLs(cwd() + "/" + std::string(command.substr(3)));
     } else if (command.size() >= 3 && command.substr(0, 2) == "l ") {
       return RunLs(cwd() + "/" + std::string(command.substr(2)));
+    } else if (command.size() >= 5 && command.substr(0, 5) == "edit ") {
+      auto window = std::make_unique<BasicEditorWindow>();
+      window->SetFilename(std::string(command.substr(5)));
+      window->decorated_rect = DefaultRectangle();
+      AddWindow(std::move(window));
     } else if (command == "edit") {
       auto window = std::make_unique<BasicEditorWindow>();
       window->decorated_rect = DefaultRectangle();
