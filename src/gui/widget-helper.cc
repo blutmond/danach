@@ -48,16 +48,31 @@ void BasicWindowState::UngrabSeat() {
     seat = nullptr;
   }
 }
-void BasicWindowState::GrabSeat() {
+void BasicWindowState::GrabSeat(const GdkEvent *event) {
+  if (seat) return;
   GdkDisplay *display = gdk_display_get_default();
-  GdkGrabStatus status;
+  GdkGrabStatus status = GDK_GRAB_FAILED;
   seat = gdk_display_get_default_seat (display);
   status = gdk_seat_grab (seat,
                           gtk_widget_get_window (window),
                           GDK_SEAT_CAPABILITY_ALL, TRUE,
-                                                    NULL, NULL, NULL, NULL);
+                                                    NULL, event, NULL, NULL);
   if (status != GDK_GRAB_SUCCESS) {
-    fprintf(stderr, "failed to grab seat\n");
+    switch (status) {
+    #define HANDLE_EVENT(EVENT) \
+    case EVENT: \
+      fprintf(stderr, "failed to grab seat: %p " #EVENT "\n", seat); \
+      break;
+    HANDLE_EVENT(GDK_GRAB_SUCCESS);
+    HANDLE_EVENT(GDK_GRAB_ALREADY_GRABBED);
+    HANDLE_EVENT(GDK_GRAB_INVALID_TIME);
+    HANDLE_EVENT(GDK_GRAB_NOT_VIEWABLE);
+    HANDLE_EVENT(GDK_GRAB_FROZEN);
+    HANDLE_EVENT(GDK_GRAB_FAILED);
+    }
+    // Hack for this gtk version.
+    gdk_window_show(gtk_widget_get_window(window));
+    seat = nullptr;
   }
 }
 
@@ -70,7 +85,7 @@ bool BasicWindowState::HandleSpecialEvents(GdkEventKey* event) {
     if (seat) {
       UngrabSeat();
     } else {
-      GrabSeat();
+      GrabSeat((GdkEvent*)event);
     }
     return true;
   }

@@ -41,12 +41,17 @@ class PasteAction {
   virtual void Apply(EscapeCommandApply& ctx, bool before) = 0;
 };
 
+struct EscapeEditContext {
+  BufferPos mark_a{10000000000,10000000000};
+};
+
 struct EscapeCommandApply {
   // EscapeCommandApply(Mode& mode, Buffer& buffer) : mode(mode), buffer(buffer) {}
 
   Mode& mode;
   Buffer* buffer;
   BufferPos& cursor;
+  EscapeEditContext& esc_ctx;
   std::unique_ptr<PasteAction>& paste_action;
 };
 

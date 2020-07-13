@@ -384,7 +384,6 @@ class WindowState : public BasicWindowState {
           +[](GtkWidget*, GdkEventMotion* event, WindowState* state) -> gboolean {
     gui::Point pt{event->x, event->y};
 
-
     if (state->dragger) {
       state->dragger->Drag(pt);
       state->redraw();
@@ -413,7 +412,19 @@ class WindowState : public BasicWindowState {
 
     return TRUE;
   })), this);
-
+  SigConnect(window, "enter-notify-event", G_CALLBACK((
+          +[](GtkWidget*, GdkEventCrossing* event, WindowState* state) -> gboolean {
+    using CBT = gboolean(*)(gpointer user_data);
+    g_timeout_add(250, (CBT)((+[](WindowState* state) -> gboolean {
+      state->GrabSeat();
+      return FALSE;
+    })), state);
+    return TRUE;
+  })), this);
+  SigConnect(window, "leave-notify-event", G_CALLBACK((
+          +[](GtkWidget*, GdkEventCrossing* event, WindowState* state) -> gboolean {
+    return TRUE;
+  })), this);
   }
 
   uint32_t press_time = -1;

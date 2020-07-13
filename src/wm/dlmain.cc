@@ -112,27 +112,6 @@ class BasicEditorWindow : public SubWindow {
     auto& buffer = *view.GetBuffer(view.buffer_id_);
     auto& cursor = view.cursor;
     if (DoEscapeKeyPress(view, keyval)) {
-    } else if (keyval == 'd') {
-      keyval = feed.Next();
-      if (keyval == 'd') {
-        fprintf(stderr, "Something\n");
-      } else if (keyval == GDK_KEY_apostrophe) {
-        keyval = feed.Next();
-        if (keyval == GDK_KEY_a) {
-          fprintf(stderr, "Delete to mark 'a\n");
-        } else {
-          fprintf(stderr, "unknown keyval (d'): %d, %s\n", keyval, gdk_keyval_name(keyval));
-        }
-      } else {
-        fprintf(stderr, "unknown keyval (d): %d, %s\n", keyval, gdk_keyval_name(keyval));
-      }
-    } else if (keyval == 'm') {
-      keyval = feed.Next();
-      if (keyval == 'a') {
-        fprintf(stderr, "MarkThing\n");
-      } else {
-        fprintf(stderr, "unknown keyval (m'): %d, %s\n", keyval, gdk_keyval_name(keyval));
-      }
     } else {
       fprintf(stderr, "unknown keyval: %d, %s\n", keyval, gdk_keyval_name(keyval));
       return false;
@@ -155,7 +134,8 @@ class BasicEditorWindow : public SubWindow {
       command_history.push_back(keyval);
       try {
         KeyFeed feed{command_history};
-        EscapeCommandApply ctx{mode, view.GetBuffer(view.buffer_id_), view.cursor, paste_action};
+        EscapeCommandApply ctx{mode, view.GetBuffer(view.buffer_id_), view.cursor,
+                               escape_context, paste_action};
         bool result = commands.HandleCommand(ctx, command_history) || KeyPressEscape(feed);
         command_history.clear();
         return result;
@@ -265,14 +245,16 @@ class BasicEditorWindow : public SubWindow {
   std::string filename;
   Buffer buffer;
   ChunkView view;
-
-  std::unique_ptr<PasteAction> paste_action;
+  EscapeEditContext escape_context;
+  static std::unique_ptr<PasteAction> paste_action;
   CommandList commands;
   Mode mode = Mode::INSERT;
   std::vector<uint32_t> command_history;
   std::string colon_text;
   size_t col_col = 0;
 };
+
+std::unique_ptr<PasteAction> BasicEditorWindow::paste_action;
 
 ADD_TRANSFER_TYPE(BasicEditorWindow, 6);
 ADD_SUBCLASS(SubWindow, BasicEditorWindow);

@@ -64,7 +64,7 @@ struct BasicWindowState {
   bool is_fullscreen_ = false;
   bool needs_redraw = true;
   void redraw();
-  void GrabSeat();
+  void GrabSeat(const GdkEvent *event = nullptr);
   void UngrabSeat();
   GdkSeat *seat = nullptr;
   void toggle_fullscreen();
