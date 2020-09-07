@@ -47,6 +47,7 @@ struct ChunkViewState {
 };
 
 bool DoKeyPress(ChunkViewState& view, uint32_t keyval);
+bool DoKeyPress(Buffer& buffer, BufferPos& pos, size_t& float_pos, uint32_t keyval);
 bool DoEscapeKeyPress(ChunkViewState& view, uint32_t keyval);
 
 struct ChunkView;

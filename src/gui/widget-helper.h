@@ -39,6 +39,9 @@ inline bool TestRectangleInside(double& x, double& y, gui::Rectangle rect) {
 inline bool TestRectangleClick(GdkEventButton* button, gui::Rectangle rect) {
   return TestRectangleInside(button->x, button->y, rect);
 }
+inline bool TestRectangleClick(GdkEventScroll* event, gui::Rectangle rect) {
+  return TestRectangleInside(event->x, event->y, rect);
+}
 
 void DoHSplit(Rectangle input, Rectangle& out1, Rectangle& out2, int split_point);
 void DoVSplit(Rectangle input, Rectangle& out1, Rectangle& out2, int split_point);
@@ -60,6 +63,7 @@ struct BasicWindowState {
   std::vector<std::pair<GtkWidget*, gulong>> events;
   void SigConnect(GtkWidget* object, const char* name, GCallback callback, void* data);
 
+  gui::Shape shape() { return {int(window_width_), int(window_height_)}; }
   
   bool is_fullscreen_ = false;
   bool needs_redraw = true;
@@ -86,6 +90,7 @@ inline void SaveClipTranslate(gui::DrawCtx& cr, gui::Rectangle rect) {
 struct RestoreEventXY {
   explicit RestoreEventXY(GdkEventButton* button) : sx(&button->x), sy(&button->y), x(button->x), y(button->y) {}
   explicit RestoreEventXY(GdkEventMotion* button) : sx(&button->x), sy(&button->y), x(button->x), y(button->y) {}
+  explicit RestoreEventXY(GdkEventScroll* button) : sx(&button->x), sy(&button->y), x(button->x), y(button->y) {}
   ~RestoreEventXY() {
     *sx = x;
     *sy = y;

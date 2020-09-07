@@ -44,6 +44,65 @@ bool DoEscapeKeyPress(ChunkViewState& view, uint32_t keyval) {
   return true;
 }
 
+bool DoKeyPress(Buffer& buffer, BufferPos& cursor, size_t& float_pos, uint32_t keyval) {
+  bool float_pos_dirty = true;
+  const auto& lines = buffer.lines;
+  auto& pos = cursor;
+  auto clip_col = [&]() {
+    // TODO: Do decoration based clipping.
+    if (float_pos == string_view::npos) {
+      float_pos = pos.col;
+    }
+    pos.col = std::min(float_pos, buffer.lines[pos.row].size());
+    float_pos_dirty = false;
+  };
+  if (keyval >= ' ' && keyval <= '~') {
+    Insert(buffer, cursor, keyval);
+  } else if (keyval == GDK_KEY_Left && pos.col > 0) {
+    pos.col -= 1;
+  } else if (keyval == GDK_KEY_Right && 
+             pos.col < lines[pos.row].size()) {
+    pos.col += 1;
+  } else if (keyval == GDK_KEY_Down && pos.row + 1 < lines.size()) {
+    pos.row += 1;
+    clip_col();
+  } else if (keyval == GDK_KEY_Up && pos.row > 0) {
+    pos.row -= 1;
+    clip_col();
+  } else if (keyval == GDK_KEY_Return) {
+    Insert(buffer, cursor, '\n');
+  } else if (keyval == GDK_KEY_BackSpace &&
+             (pos.row > 0 || pos.col > 0)) {
+    auto new_pos = pos;
+    if (new_pos.col == 0) {
+      new_pos.row -= 1;
+      new_pos.col = lines[new_pos.row].size();
+    } else {
+      new_pos.col -= 1;
+    }
+    Delete(buffer, new_pos, pos);
+    pos = new_pos;
+  } else if (keyval == GDK_KEY_Delete &&
+             (pos.col < lines[pos.row].size() || pos.row + 1 < lines.size())) {
+    auto new_pos = pos;
+    if (new_pos.col == lines[pos.row].size()) {
+      new_pos.row += 1;
+      new_pos.col = 0;
+    } else {
+      new_pos.col += 1;
+    }
+    Delete(buffer, pos, new_pos);
+  } else if (keyval == GDK_KEY_Home) {
+    pos.col = 0;
+  } else if (keyval == GDK_KEY_End) {
+    pos.col = lines[pos.row].size();
+  } else {
+    return false;
+  }
+  if (float_pos_dirty) float_pos = string_view::npos;
+  return true;
+}
+
 bool DoKeyPress(ChunkViewState& view, uint32_t keyval) {
   if (view.num_buffers() == 0) return false;
   auto& buffer_id_ = view.buffer_id_;

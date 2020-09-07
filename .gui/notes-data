@@ -1,0 +1,976 @@
+#0 vector<any_ref>: [
+ #7
+ #9
+ #12
+ #13
+ #27
+ #16
+ #17
+ #29
+ #19
+ #20
+ #21
+ #8
+ #23
+ #28
+ @new BuiltinDecl: {
+  - name: LayoutLineState
+ }
+ @new BuiltinDecl: {
+  - name: CursorState
+ }
+ @new BuiltinDecl: {
+  - name: tptr
+ }
+ @new Void: {
+ }
+ @new StructDecl: {
+  - name: ConstStringDrawState
+  - group: #7
+  - vars: [
+   {
+    - name: value
+    - type: #8
+   }
+  ]
+ }
+ #11
+ @new StructDecl: {
+  - name: StructDecl
+  - group: #9
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+   {
+    - name: group
+    - type: #10
+   }
+   {
+    - name: vars
+    - type: @new VectorSpecialization: {
+     - element: #11
+    }
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: PointerDecl
+  - group: #9
+  - vars: [
+   {
+    - name: pointee
+    - type: #10
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: ReferenceDecl
+  - group: #9
+  - vars: [
+   {
+    - name: wrapping
+    - type: #10
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: Void
+  - group: #9
+  - vars: [
+  ]
+ }
+ @new StructDecl: {
+  - name: VectorSpecialization
+  - group: #9
+  - vars: [
+   {
+    - name: element
+    - type: #10
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: TypeGroupDecl
+  - group: #9
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: BuiltinDecl
+  - group: #9
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+  ]
+ }
+ #14
+ #18
+ @new StructDecl: {
+  - name: pointer_metatype
+  - group: #12
+  - vars: [
+   {
+    - name: pointee
+    - type: #15
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: vector_metatype
+  - group: #12
+  - vars: [
+   {
+    - name: element
+    - type: #15
+   }
+   {
+    - name: get_size
+    - type: #19
+   }
+   {
+    - name: get_element
+    - type: #20
+   }
+   {
+    - name: emplace_back
+    - type: @new BuiltinDecl: {
+     - name: raw_fn_ptr<void(void*)>
+    }
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: type_group_metatype
+  - group: #12
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+   {
+    - name: children
+    - type: @new VectorSpecialization: {
+     - element: #15
+    }
+   }
+   {
+    - name: get_kind
+    - type: #19
+   }
+   {
+    - name: load_type
+    - type: @new BuiltinDecl: {
+     - name: raw_fn_ptr<metatype*(size_t)>
+    }
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: builtin_metatype
+  - group: #12
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+   {
+    - name: typeinfo
+    - type: @new PointerDecl: {
+     - pointee: #21
+    }
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: StringEditState
+  - group: #7
+  - vars: [
+   {
+    - name: var
+    - type: #25
+   }
+   {
+    - name: alt_text
+    - type: #8
+   }
+  ]
+ }
+ #22
+ @new StructDecl: {
+  - name: FunctionDecl
+  - group: #nil
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+   {
+    - name: result
+    - type: #10
+   }
+   {
+    - name: args
+    - type: #24
+   }
+   {
+    - name: body
+    - type: #23
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: SwitchFunctionDecl
+  - group: #nil
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+   {
+    - name: result
+    - type: #10
+   }
+   {
+    - name: args
+    - type: #24
+   }
+   {
+    - name: body
+    - type: #23
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: TextButtonTypeSelect
+  - group: #7
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: MultiLineEditState
+  - group: #7
+  - vars: [
+   {
+    - name: read_buffer
+    - type: #25
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: CommaForState
+  - group: #7
+  - vars: [
+   {
+    - name: var
+    - type: #25
+   }
+   {
+    - name: child
+    - type: #26
+   }
+   {
+    - name: comma
+    - type: #26
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: ForDrawState
+  - group: #7
+  - vars: [
+   {
+    - name: var
+    - type: #25
+   }
+   {
+    - name: child
+    - type: #26
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: TypeDeclToolEditState
+  - group: #7
+  - vars: [
+   {
+    - name: var
+    - type: #25
+   }
+   {
+    - name: alt_text
+    - type: #8
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: StringDrawState
+  - group: #7
+  - vars: [
+   {
+    - name: var
+    - type: #25
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: DrawFunctorList
+  - group: #7
+  - vars: [
+   {
+    - name: children
+    - type: #30
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: DrawIfNotNullState
+  - group: #7
+  - vars: [
+   {
+    - name: child
+    - type: #26
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: DrawIfIsAState
+  - group: #7
+  - vars: [
+   {
+    - name: type
+    - type: #15
+   }
+   {
+    - name: child
+    - type: #26
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: PointerBuilderState
+  - group: #7
+  - vars: [
+  ]
+ }
+ @new StructDecl: {
+  - name: VectorBuilderState
+  - group: #7
+  - vars: [
+  ]
+ }
+ @new StructDecl: {
+  - name: IndentChangeState
+  - group: #7
+  - vars: [
+   {
+    - name: child
+    - type: #26
+   }
+   {
+    - name: indent
+    - type: #27
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: ColorChangeState
+  - group: #7
+  - vars: [
+   {
+    - name: child
+    - type: #26
+   }
+   {
+    - name: color
+    - type: #28
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: NewLineDrawState
+  - group: #7
+  - vars: [
+  ]
+ }
+ @new StructDecl: {
+  - name: TextButton
+  - group: #7
+  - vars: [
+   {
+    - name: button_text
+    - type: #8
+   }
+   {
+    - name: exec_fn
+    - type: #29
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: NamedDrawFunctor
+  - group: #7
+  - vars: [
+   {
+    - name: name
+    - type: #8
+   }
+   {
+    - name: child
+    - type: #26
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: SwitchDrawFunctor
+  - group: #7
+  - vars: [
+   {
+    - name: table
+    - type: #30
+   }
+   {
+    - name: other
+    - type: #26
+   }
+  ]
+ }
+ @new StructDecl: {
+  - name: UnhandledTypeDrawFunctor
+  - group: #7
+  - vars: [
+  ]
+ }
+]
+#1 vector<any_ref>: [
+ @new FunctionDecl: {
+  - name: layout
+  - result: #31
+  - args: [
+   {
+    - name: self
+    - type: @new ReferenceDecl: {
+     - wrapping: @new StructDecl: {
+      - name: ConstStringDrawState
+      - group: #32
+      - vars: [
+       {
+        - name: value
+        - type: @new BuiltinDecl: {
+         - name: std::string
+        }
+       }
+      ]
+     }
+    }
+   }
+   {
+    - name: obj
+    - type: #33
+   }
+   {
+    - name: state
+    - type: #34
+   }
+   {
+    - name: cstate
+    - type: #35
+   }
+  ]
+  - body: <
+   state.layout(self.value);
+   state.flush();
+  >
+ }
+ @new SwitchFunctionDecl: {
+  - name: layout
+  - result: #31
+  - args: [
+   {
+    - name: self
+    - type: @new ReferenceDecl: {
+     - wrapping: #32
+    }
+   }
+   {
+    - name: obj
+    - type: #33
+   }
+   {
+    - name: state
+    - type: #34
+   }
+   {
+    - name: cstate
+    - type: #35
+   }
+  ]
+  - body: <
+   
+  >
+ }
+]
+#2 DrawFunctorList: {
+ - children: [
+  @new VectorBuilderState: {
+  }
+  @new NewLineDrawState: {
+  }
+  @new NewLineDrawState: {
+  }
+  @new PointerBuilderState: {
+  }
+  @new NewLineDrawState: {
+  }
+  @new NewLineDrawState: {
+  }
+  @new ConstStringDrawState: {
+   - value: struct 
+  }
+  @new StringEditState: {
+   - var: #!Builder::type_name
+   - alt_text: enter type name
+  }
+  @new ConstStringDrawState: {
+   - value:  : 
+  }
+  @new TypeDeclToolEditState: {
+   - var: #!Builder::group
+   - alt_text: insert type
+  }
+  @new NewLineDrawState: {
+  }
+  @new IndentChangeState: {
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new ForDrawState: {
+      - var: #!Builder::vars
+      - child: @new DrawFunctorList: {
+       - children: [
+        @new ConstStringDrawState: {
+         - value: var 
+        }
+        @new StringEditState: {
+         - var: #!StructDecl_Var::name
+         - alt_text: enter var name
+        }
+        @new ConstStringDrawState: {
+         - value:  : 
+        }
+        @new TypeDeclToolEditState: {
+         - var: #!StructDecl_Var::type
+         - alt_text: insert type
+        }
+        @new NewLineDrawState: {
+        }
+       ]
+      }
+     }
+     @new TextButton: {
+      - button_text: -- add layout --
+      - exec_fn: add_builder_var
+     }
+    ]
+   }
+   - indent: 20
+  }
+  @new TextButton: {
+   - button_text: -- publish --
+   - exec_fn: publish_builder
+  }
+ ]
+}
+#3 DrawFunctorList: {
+ - children: [
+  @new DrawIfIsAState: {
+   - type: #$FunctionDecl
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new ConstStringDrawState: {
+      - value: func 
+     }
+     @new StringDrawState: {
+      - var: #!FunctionDecl::name
+     }
+     @new ConstStringDrawState: {
+      - value: (
+     }
+     @new CommaForState: {
+      - var: #!FunctionDecl::args
+      - child: @new DrawFunctorList: {
+       - children: [
+        @new StringDrawState: {
+         - var: #!FunctionDeclArg::name
+        }
+        @new ConstStringDrawState: {
+         - value:  : 
+        }
+        @new TypeDeclToolEditState: {
+         - var: #!FunctionDeclArg::type
+         - alt_text: insert type
+        }
+       ]
+      }
+      - comma: @new ConstStringDrawState: {
+       - value: , 
+      }
+     }
+     @new ConstStringDrawState: {
+      - value: ) -> 
+     }
+     @new TypeDeclToolEditState: {
+      - var: #!FunctionDecl::result
+      - alt_text: insert type
+     }
+     @new NewLineDrawState: {
+     }
+     @new IndentChangeState: {
+      - child: @new MultiLineEditState: {
+       - read_buffer: #!FunctionDecl::body
+      }
+      - indent: 20
+     }
+    ]
+   }
+  }
+  @new DrawIfIsAState: {
+   - type: #$SwitchFunctionDecl
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new ConstStringDrawState: {
+      - value: switch_func 
+     }
+     @new StringDrawState: {
+      - var: #!SwitchFunctionDecl::name
+     }
+     @new ConstStringDrawState: {
+      - value: (
+     }
+     @new CommaForState: {
+      - var: #!SwitchFunctionDecl::args
+      - child: @new DrawFunctorList: {
+       - children: [
+        @new StringDrawState: {
+         - var: #!FunctionDeclArg::name
+        }
+        @new ConstStringDrawState: {
+         - value:  : 
+        }
+        @new TypeDeclToolEditState: {
+         - var: #!FunctionDeclArg::type
+         - alt_text: insert type
+        }
+       ]
+      }
+      - comma: @new ConstStringDrawState: {
+       - value: , 
+      }
+     }
+     @new ConstStringDrawState: {
+      - value: ) -> 
+     }
+     @new TypeDeclToolEditState: {
+      - var: #!SwitchFunctionDecl::result
+      - alt_text: insert type
+     }
+     @new NewLineDrawState: {
+     }
+     @new IndentChangeState: {
+      - child: @new MultiLineEditState: {
+       - read_buffer: #!SwitchFunctionDecl::body
+      }
+      - indent: 20
+     }
+    ]
+   }
+  }
+ ]
+}
+#4 DrawFunctorList: {
+ - children: [
+  @new DrawIfIsAState: {
+   - type: #$StructDecl
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new TextButtonTypeSelect: {
+      - name: struct
+     }
+     @new ConstStringDrawState: {
+      - value:  
+     }
+     @new StringDrawState: {
+      - var: #!StructDecl::name
+     }
+     @new DrawIfNotNullState: {
+      - child: @new DrawFunctorList: {
+       - children: [
+        @new ConstStringDrawState: {
+         - value:  : 
+        }
+        @new TypeDeclToolEditState: {
+         - var: #!StructDecl::group
+         - alt_text: insert type
+        }
+       ]
+      }
+     }
+     @new NewLineDrawState: {
+     }
+     @new IndentChangeState: {
+      - child: @new ForDrawState: {
+       - var: #!StructDecl::vars
+       - child: @new DrawFunctorList: {
+        - children: [
+         @new ConstStringDrawState: {
+          - value: var 
+         }
+         @new StringDrawState: {
+          - var: #!StructDecl_Var::name
+         }
+         @new ConstStringDrawState: {
+          - value:  : 
+         }
+         @new TypeDeclToolEditState: {
+          - var: #!StructDecl_Var::type
+          - alt_text: insert type
+         }
+         @new NewLineDrawState: {
+         }
+        ]
+       }
+      }
+      - indent: 20
+     }
+    ]
+   }
+  }
+  @new DrawIfIsAState: {
+   - type: #$TypeGroupDecl
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new TextButtonTypeSelect: {
+      - name: type_group
+     }
+     @new ConstStringDrawState: {
+      - value:  
+     }
+     @new StringDrawState: {
+      - var: #!TypeGroupDecl::name
+     }
+     @new NewLineDrawState: {
+     }
+    ]
+   }
+  }
+  @new DrawIfIsAState: {
+   - type: #$BuiltinDecl
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new TextButtonTypeSelect: {
+      - name: builtin
+     }
+     @new ConstStringDrawState: {
+      - value:  
+     }
+     @new StringDrawState: {
+      - var: #!BuiltinDecl::name
+     }
+     @new NewLineDrawState: {
+     }
+    ]
+   }
+  }
+  @new DrawIfIsAState: {
+   - type: #$Void
+   - child: @new DrawFunctorList: {
+    - children: [
+     @new TextButtonTypeSelect: {
+      - name: void
+     }
+     @new NewLineDrawState: {
+     }
+    ]
+   }
+  }
+ ]
+}
+#5 vector<any_ref>: [
+ #6
+]
+#6 NamedDrawFunctor: {
+ - name: mutate_draw_functor
+ - child: @new SwitchDrawFunctor: {
+  - table: [
+  ]
+  - other: #nil
+ }
+}
+#7 TypeGroupDecl: {
+ - name: UnaryDrawFunctor
+}
+#8 BuiltinDecl: {
+ - name: std::string
+}
+#9 TypeGroupDecl: {
+ - name: TypeRef
+}
+#10 PointerDecl: {
+ - pointee: #9
+}
+#11 StructDecl: {
+ - name: StructDecl_Var
+ - group: #nil
+ - vars: [
+  {
+   - name: name
+   - type: #8
+  }
+  {
+   - name: type
+   - type: #10
+  }
+ ]
+}
+#12 TypeGroupDecl: {
+ - name: metatype
+}
+#13 BuiltinDecl: {
+ - name: int
+}
+#14 StructDecl: {
+ - name: struct_metatype
+ - group: #12
+ - vars: [
+  {
+   - name: name
+   - type: #8
+  }
+  {
+   - name: group
+   - type: #15
+  }
+  {
+   - name: kind
+   - type: #13
+  }
+  {
+   - name: vars
+   - type: @new VectorSpecialization: {
+    - element: #18
+   }
+  }
+  {
+   - name: allocate
+   - type: #17
+  }
+ ]
+}
+#15 PointerDecl: {
+ - pointee: #12
+}
+#16 BuiltinDecl: {
+ - name: raw_fn_ptr<void*(void*)>
+}
+#17 BuiltinDecl: {
+ - name: raw_fn_ptr<void*()>
+}
+#18 StructDecl: {
+ - name: var_field_info
+ - group: #nil
+ - vars: [
+  {
+   - name: base
+   - type: @new PointerDecl: {
+    - pointee: #14
+   }
+  }
+  {
+   - name: name
+   - type: #8
+  }
+  {
+   - name: type
+   - type: #15
+  }
+  {
+   - name: fetch_var
+   - type: #16
+  }
+ ]
+}
+#19 BuiltinDecl: {
+ - name: raw_fn_ptr<size_t(void*)>
+}
+#20 BuiltinDecl: {
+ - name: raw_fn_ptr<void*(void*, size_t)>
+}
+#21 BuiltinDecl: {
+ - name: const std::type_info
+}
+#22 StructDecl: {
+ - name: FunctionDeclArg
+ - group: #nil
+ - vars: [
+  {
+   - name: name
+   - type: #8
+  }
+  {
+   - name: type
+   - type: #10
+  }
+ ]
+}
+#23 BuiltinDecl: {
+ - name: Buffer
+}
+#24 VectorSpecialization: {
+ - element: #22
+}
+#25 PointerDecl: {
+ - pointee: #18
+}
+#26 PointerDecl: {
+ - pointee: #7
+}
+#27 BuiltinDecl: {
+ - name: size_t
+}
+#28 BuiltinDecl: {
+ - name: gui::ColorRGB
+}
+#29 BuiltinDecl: {
+ - name: raw_fn_ptr<void(any_ref)>
+}
+#30 VectorSpecialization: {
+ - element: #26
+}
+#31 Void: {
+}
+#32 TypeGroupDecl: {
+ - name: UnaryDrawFunctor
+}
+#33 BuiltinDecl: {
+ - name: tptr
+}
+#34 ReferenceDecl: {
+ - wrapping: @new BuiltinDecl: {
+  - name: LayoutLineState
+ }
+}
+#35 ReferenceDecl: {
+ - wrapping: @new BuiltinDecl: {
+  - name: CursorState
+ }
+}
