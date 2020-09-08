@@ -1,0 +1,189 @@
+ Split window (pretty easy)
+ Side 1:
+  - A list of items. (We can install a 'tool' into this where we can 'click')
+ Side a:
+  - A tool item. (That you can compose).
+
+ Things to draw:
+  - Struct layout with references. (ability to expand things some).
+  - A list of lists (organize functions into protocols etc).
+   - Organize classes into different lists (and projects).
+
+ Tools:
+  - Construct a new type (tuple). (nominal types).
+  - Evaluate a "function". (And a stack of results).
+
+ Consider stage one done when I have:
+ Two panes:
+ - Pane 1 is a fixed constructor and a list of previously referenced objects...
+ - Pane 2 is an organization system to insert and reference objects.
+
+ Tools involve:
+  - Saving out the organizational structure. (pickling??)
+  - 
+
+ Another way to solve the segfault is to recurse looking for the string pointer when doing
+ the textual inserts as well. (Not a bad idea...)
+
+ As long as draw and view cycle stuff doesn't create garbage, no gc should be fine...
+
+ Future stuff involves:
+ - 
+
+ TODO: 
+ 
+ Types for builder logic... (Some basic builder / lens logic)
+ Some basic tool logic for storing pointers to things. (just sortof store it)
+ Drawer for drawer (allow visualizing visualizers).
+ 
+ Visualizer for gui subclasses. 
+  Some sort of basic type switching.
+  An editor for building up editors?
+  Some sort of function builder?
+  Some sort of notion of builtin types? (complete with codegen?)
+  Add some notion of generated type / generated function and bring over most
+   builtin types for that.
+  
+  - Switch types.
+  - Draw Builtin types (and their ptrs).
+  - Need a new basic builder type?
+  - Start doing serialization?
+
+  Version 2:
+  - Functions over things. Builtin types and structural types.
+  - 
+
+ Item:
+  - Add a serialization function (instead of just a data layout).
+  - (Have to convert all (or some) the data structures over first).
+  - Add codegen for the basic data structures? Refactor slowly in that direction.
+  - Add codegen for the basic data structures? (along with type-info).
+  - Do some generation for the member references (lists, etc).
+    Give them names, draw them, etc.
+  - Add codegen for functions (and multi-function dispatches).
+
+ Goal point:
+  - Some sort of idea of a thing (x) which is a transformed version of (y) but
+    stays up to date? (is it needed for a while?)
+  - Need to start adding type metadata for functions. (at least be able to organize them and build lists).
+  - Need to consider making organizational datastructures.
+
+ Ordered list:
+  - Flush out codegen. (add dyn_cast codegen). x
+  - Add function dispatch codegen. x
+  - Add struct codegen. x
+  - move TypeRef information up a level). x
+ 
+  - Upgrade thing-drawing such that it can be serialized and modified. x
+  - Start adding serialization. (Just do a text format??) x
+  - Do I need builders for the templates and everything? (before serialization?) x
+  - Make a builder for pointers (something to dedup?? (or just dedup when saving??)) x
+
+  Current TODO:
+  - Add self-emit. (sigh, do it twice...)
+  - Flush out some types.
+
+  - Move over some of the function builder types.
+  - Move some of the gui types over. (And builders for them...)
+  - Make a serializable gui for operating over guis.
+  x Something about scrolling or tabs?
+
+  - Emit list of all builtin metadata.
+  - Swap out middle drawing with the list of builtin metadata.
+  - 
+ 
+ Options:
+ - Do drawing of UnaryDrawFunctor (and serialization).
+ x Convert some of the other things to be metadata based.
+ - convert existing editors to be metadata based.
+ - make builders / zeros for editors.
+ - Do a bit of reorganization (make a file for emiting things / move / serialize old editors)
+ - Possibilities:
+  - A virtual 'conversion' function which translates to the other version.
+  - A templatized wrapper for constructing things.
+  - Convert one of the basic types over to use 'anytypes'
+  - Add switch statements for any_type construction.
+
+  x Switch over all old stuff to use var fetchers. (todo: consider a 'lens type' == new switch hierarchy including var fetching)
+   x Some solution to replace is_a (probably is_type taking metatype)
+   x Some solution to replace pointer storing. (Basically FoundTypeRef but with a pointer metatype instead...)
+   x Switch over for loop (manually write code for std::vector<std::unique_ptr<T>>).
+
+ -- Start making converters to the new layout.
+  - Start making serialization?
+  - Get enough together to build new guis within the gui. (Do the named type) and build up via that.
+
+ - text format: ... (?? allow nesting?? do not invest too much in the text format)
+ - (implement + start implementing editors for self-guis). either generic fn or manual.
+ x Need a way to refer to types (done)
+  x Need a way to add a parsing setup. ??
+  x Need a solution for 'exec_fn' (Ability to inject a map of builtin any types).
+     std::unordered_map<std::string, any_ref> and std::unordered_map<void*, std::string>
+
+ - Dump all the manual code building stuff once parsing is built up?
+  - Manually start writing some gui stuff with that as well.
+  - Move things into the other file, and start reorganizing.
+
+ Cut down this file size:
+ - Move all draw functions into the gui.
+ - Load entirely from text files.
+ - Building and organizing lists.
+ - Actually do the ui thing?
+ - Generate the switch loader for any_ref(GroupType* ??)
+ - Just make a basic reflection builder ??
+ - Move more things into the gui.
+ - Start making organization stuff.
+ - Just add some buttons for making objects (Need something silly).
+  - Do the named drawable things.
+    (and a list of drawable things for drawing and editing drawables).
+  - Need to add a way to build functions as well.
+
+ Concrete TODO:
+  - Convert more of the general layout to be editable / config driven.
+  - New base type: ShapedDrawFn (horizontal layout ...)
+  - And some things for fields and pointers.
+  - NamedDrawFn.
+  - Add some things for building up a layout.
+  - Add a builder type thing for constructing new unarydrawfn
+   - manually curated list of types and a editing draw function for them.
+   - ability to publish or just reference this list.
+  - Add a mutable thing that lets you set the any_ref and how to draw it (for a view).
+  - Add a list append tool.
+  - Convert builder to be a list of editable things (a tmp list).
+
+  - Set default view for views to be a named version that points to the switch type.
+  - Consider just making it mutating in order to save on time. (can do the immutable one later).
+  - A list of buttons per type on the lhs in order to add them (just append)
+  - Add a new list-editor type.
+  - Write f3 to rebuild switch statements.
+
+ Updated TODO:
+  - Generic pointer default editor (Just make a new class type)?
+  - Generic pointer view editor.
+  - (Autogenerate the default editor and then allow editing).
+  - (Focus on organization of these default views).
+  - Need a 'tool window'.
+  - Some sort of 'cycle protection'.
+
+  struct_metatype 
+  - Basic struct layout drawing:
+  list of field drawing
+
+  var_field_info:
+   - Pointer draw
+   - Value draw
+  pointer_metatype:
+   - Either draw as value or pointer.
+  vector_metatype (need an editor for vectors).
+   - Draw as a value type.
+  type_group_metatype (need to know if actually value or ptr)
+   - 
+  builtin_metatype (string, integer, Buffer)
+   - Just a switch statement on the builtin type?
+
+  
+
+   type_group_switch:
+     var type: ptr<metatype>
+     var 
+   }

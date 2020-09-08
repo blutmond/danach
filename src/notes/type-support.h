@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vector>
+#include "rules/string-utils.h"
+#include <iostream>
 
 template <typename Child, typename Base>
 Child* dyn_cast(Base* base);
@@ -107,3 +109,27 @@ struct any_ref {
   metatype* type_;
 };
 using tptr = any_ref;
+
+any_ref dereference(any_ref ptr);
+void do_pointer_assign(any_ref ptr, any_ref value);
+any_ref vector_append_back(any_ref arr);
+size_t array_size(any_ref arr);
+any_ref array_index(any_ref arr, size_t index);
+
+struct builtin_record {
+  std::string name;
+  any_ref data;
+};
+std::vector<builtin_record>& get_builtins();
+std::string& lookup_builtin_name(void* builtin);
+any_ref lookup_builtin(const std::string name);
+
+void emit_metatype(std::ostream& stream, metatype& t);
+var_field_info& find_var(metatype* base, string_view name);
+
+template <typename Base>
+var_field_info& find_var(string_view name) {
+  return find_var(get_metatype<Base>(), name);
+}
+any_ref allocate_type_by_name(string_view type_name);
+metatype* load_metatype_by_name(string_view type_name);

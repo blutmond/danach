@@ -719,6 +719,10 @@ metatype* metatype_type_info<TypeRef>::get() {
   return result;
 }
 template <>
+any_ref::any_ref(TypeRef* value) : value_(value), type_(get_metatype<TypeRef>()) {
+  type_ = reinterpret_cast<type_group_metatype*>(type_)->load_type(static_cast<size_t>(value->getKind()));
+}
+template <>
 metatype* metatype_type_info<metatype>::get() {
   static type_group_metatype* result = nullptr;
   if (result) return result;
@@ -735,6 +739,10 @@ metatype* metatype_type_info<metatype>::get() {
     }
   };
   return result;
+}
+template <>
+any_ref::any_ref(metatype* value) : value_(value), type_(get_metatype<metatype>()) {
+  type_ = reinterpret_cast<type_group_metatype*>(type_)->load_type(static_cast<size_t>(value->getKind()));
 }
 template <>
 metatype* metatype_type_info<UnaryDrawFunctor>::get() {
@@ -768,6 +776,10 @@ metatype* metatype_type_info<UnaryDrawFunctor>::get() {
     }
   };
   return result;
+}
+template <>
+any_ref::any_ref(UnaryDrawFunctor* value) : value_(value), type_(get_metatype<UnaryDrawFunctor>()) {
+  type_ = reinterpret_cast<type_group_metatype*>(type_)->load_type(static_cast<size_t>(value->getKind()));
 }
 template <>
 metatype* metatype_type_info<std::string>::get() {

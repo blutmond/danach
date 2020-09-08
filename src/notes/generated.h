@@ -274,5 +274,37 @@ struct SwitchDrawFunctor : public UnaryDrawFunctor {
 struct UnhandledTypeDrawFunctor : public UnaryDrawFunctor {
   UnhandledTypeDrawFunctor() : UnaryDrawFunctor(Kind::UnhandledTypeDrawFunctor) {}
 };
+template <>
+any_ref::any_ref(TypeRef* value);
+template <>
+any_ref::any_ref(metatype* value);
+template <>
+any_ref::any_ref(UnaryDrawFunctor* value);
+template <>
+metatype* metatype_type_info<std::string>::get();
+template <>
+metatype* metatype_type_info<int>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<void*(void*)>>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<void*()>>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<size_t(void*)>>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<void*(void*, size_t)>>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<void(void*)>>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<metatype*(size_t)>>::get();
+template <>
+metatype* metatype_type_info<const std::type_info>::get();
+template <>
+metatype* metatype_type_info<Buffer>::get();
+template <>
+metatype* metatype_type_info<size_t>::get();
+template <>
+metatype* metatype_type_info<gui::ColorRGB>::get();
+template <>
+metatype* metatype_type_info<raw_fn_ptr<void(any_ref)>>::get();
 void layout(ConstStringDrawState& self, tptr obj, LayoutLineState& state, CursorState& cstate);
 void layout(UnaryDrawFunctor& self, tptr obj, LayoutLineState& state, CursorState& cstate);

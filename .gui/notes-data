@@ -813,7 +813,8 @@
  - child: @new SwitchDrawFunctor: {
   - table: [
   ]
-  - other: #nil
+  - other: @new UnhandledTypeDrawFunctor: {
+  }
  }
 }
 #7 TypeGroupDecl: {
